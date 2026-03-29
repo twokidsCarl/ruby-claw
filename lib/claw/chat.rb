@@ -26,6 +26,7 @@ module Claw
     def self.start(caller_binding)
       require "reline"
       load_history
+      load_compiled_methods(caller_binding)
       puts "#{DIM}Claw agent · type 'exit' to quit#{RESET}"
       puts
 
@@ -61,6 +62,27 @@ module Claw
       # ignore corrupt history
     end
     private_class_method :load_history
+
+    # Reload mana def compiled methods from .mana_cache/ on session start.
+    # These are pre-compiled Ruby methods that don't need LLM calls.
+    def self.load_compiled_methods(caller_binding)
+      cache_dir = Mana::Compiler.cache_dir
+      return unless Dir.exist?(cache_dir)
+
+      count = 0
+      Dir.glob(File.join(cache_dir, "*.rb")).each do |path|
+        code = File.read(path)
+        # Skip the header comment lines, eval the method definition
+        caller_binding.eval(code, path, 1)
+        count += 1
+      rescue => e
+        $stderr.puts "#{DIM}  ⚠ could not load #{File.basename(path)}: #{e.message}#{RESET}" if Mana.config.verbose
+      end
+      puts "#{DIM}  ✓ loaded #{count} compiled methods#{RESET}" if count > 0
+    rescue => e
+      # Don't crash on cache loading failure
+    end
+    private_class_method :load_compiled_methods
 
     def self.save_history
       lines = Reline::HISTORY.to_a.last(HISTORY_MAX)
