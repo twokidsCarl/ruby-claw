@@ -229,12 +229,25 @@ module Claw
 
         # Schedule compaction after each exchange
         Claw.memory&.schedule_compaction
+        append_interaction_log(input, result)
       rescue Mana::LLMError, Mana::MaxIterationsError => e
         flush_line_buffer(line_buffer, in_code_block) if streaming_text
         puts "#{ERROR_COLOR}error: #{e.message}#{RESET}"
       end
     end
     private_class_method :run_claw
+
+    # --- Interaction logging ---
+
+    def self.append_interaction_log(input, result)
+      store = Claw::FileStore.new
+      title = input.length > 50 ? input[0..47] + "..." : input
+      detail = result ? "- Result: #{result.to_s[0..100]}" : "- (no result)"
+      store.append_log(title: title, detail: detail)
+    rescue => e
+      # Don't crash on log failure
+    end
+    private_class_method :append_interaction_log
 
     # --- Markdown rendering ---
 

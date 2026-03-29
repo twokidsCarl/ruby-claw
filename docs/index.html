@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ruby-claw 🦀 — AI Agent Framework for Ruby</title>
+  <meta name="description" content="Persistent memory, interactive chat, session recovery. Built on ruby-mana.">
+  <meta property="og:title" content="ruby-claw — AI Agent Framework for Ruby">
+  <meta property="og:description" content="Persistent memory, interactive chat, session recovery. Built on ruby-mana.">
+  <style>
+    :root { --bg:#0d1117; --sf:#161b22; --bd:#30363d; --tx:#e6edf3; --dim:#8b949e; --ac:#2dd4bf; --ac2:#34d399; --ac3:#79c0ff; --gr:#3fb950; --or:#d29922; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.6}
+    a{color:var(--ac3);text-decoration:none} a:hover{text-decoration:underline}
+    code,pre{font-family:'SF Mono','Fira Code',monospace}
+    .c{max-width:880px;margin:0 auto;padding:0 24px}
+    nav{position:sticky;top:0;z-index:100;background:rgba(13,17,23,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd);padding:12px 0}
+    nav .c{display:flex;align-items:center;justify-content:space-between}
+    nav .logo{font-weight:700;font-size:1.1rem} nav .logo .m{color:var(--ac)}
+    nav .lk{display:flex;gap:20px;font-size:.9rem} nav .lk a{color:var(--dim)} nav .lk a:hover{color:var(--tx);text-decoration:none}
+    .hero{text-align:center;padding:100px 0 70px;position:relative}
+    .hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:700px;height:700px;background:radial-gradient(circle,rgba(45,212,191,.12) 0%,transparent 70%);pointer-events:none}
+    .hero h1{font-size:3.5rem;font-weight:800;letter-spacing:-.03em;margin-bottom:16px} .hero h1 .m{color:var(--ac)}
+    .hero .tl{font-size:1.25rem;color:var(--dim);max-width:560px;margin:0 auto 12px}
+    .hero .sub{font-size:.95rem;color:var(--dim);margin-bottom:40px} .hero .sub em{color:var(--ac2);font-style:normal}
+    pre{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:20px 24px;overflow-x:auto;font-size:.88rem;line-height:1.7}
+    .hero-code{display:inline-block;max-width:620px;width:100%;text-align:left}
+    .kw{color:#f778ba} .str{color:#a5d6ff} .ms{color:var(--gr);font-weight:500} .cmt{color:var(--dim)} .num{color:var(--or)} .fn{color:#d2a8ff} .prompt{color:var(--ac);font-weight:700;user-select:none}
+    section{padding:60px 0} section h2{font-size:2rem;font-weight:700;margin-bottom:12px;letter-spacing:-.02em}
+    .lead{color:var(--dim);font-size:1.05rem;margin-bottom:32px;max-width:600px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+    .card{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:20px 24px}
+    .card h3{font-size:1rem;margin-bottom:6px} .card p{font-size:.88rem;color:var(--dim)}
+    .card code{color:var(--ac);font-size:.85rem}
+    .ib{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px 24px;display:inline-block;font-size:1rem;margin-bottom:12px}
+    .ib .d{color:var(--dim);user-select:none}
+    .ex{margin-top:32px} .ex h3{font-size:1.15rem;margin-bottom:12px} .ex p{font-size:.9rem;color:var(--dim);margin-bottom:12px}
+    .mana-link{display:inline-block;margin-top:24px;padding:10px 24px;border:1px solid var(--bd);border-radius:8px;color:var(--dim);font-size:.95rem;transition:border-color .2s,color .2s}
+    .mana-link:hover{border-color:var(--ac);color:var(--ac);text-decoration:none}
+    footer{border-top:1px solid var(--bd);padding:40px 0;text-align:center;color:var(--dim);font-size:.85rem}
+    footer a{color:var(--dim)} footer a:hover{color:var(--tx)}
+
+    /* Mobile */
+    @media(max-width:768px){
+      .c{padding:0 16px}
+      nav .lk{gap:12px;font-size:.8rem}
+      .hero{padding:60px 0 40px}
+      .hero h1{font-size:2.4rem}
+      .hero .tl{font-size:1.05rem}
+      .hero .sub{font-size:.85rem;margin-bottom:24px}
+      pre{padding:14px 16px;font-size:.78rem;line-height:1.6;-webkit-overflow-scrolling:touch}
+      section{padding:40px 0}
+      section h2{font-size:1.5rem}
+      .lead{font-size:.95rem}
+      .grid{grid-template-columns:1fr}
+      .card{padding:16px 18px}
+      .card h3{font-size:.95rem}
+      .card p{font-size:.82rem}
+      .ex h3{font-size:1.05rem}
+      footer{padding:30px 0}
+    }
+    @media(max-width:480px){
+      nav .c{flex-direction:column;gap:8px}
+      nav .lk{justify-content:center;flex-wrap:wrap;gap:10px}
+      .hero h1{font-size:1.9rem}
+      .hero .tl{font-size:.95rem}
+      pre{padding:12px 12px;font-size:.72rem;border-radius:8px}
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="c">
+    <div class="logo">ruby-<span class="m">claw</span> 🦀</div>
+    <div class="lk">
+      <a href="#features">Features</a>
+      <a href="#example">Example</a>
+      <a href="https://github.com/twokidsCarl/ruby-claw">GitHub</a>
+      <a href="https://rubygems.org/gems/ruby-claw">RubyGems</a>
+    </div>
+  </div>
+</nav>
+
+<div class="c">
+
+<!-- Hero -->
+<div class="hero">
+  <h1>ruby-<span class="m">claw</span> 🦀</h1>
+  <p class="tl">AI Agent Framework for Ruby</p>
+  <p class="sub">Persistent memory, interactive chat, session recovery. Built on <em>ruby-mana</em>.</p>
+
+  <div style="display:inline-block;max-width:540px;width:100%;text-align:left">
+<pre><span class="prompt">claw&gt;</span> remember that the API uses OAuth2
+<span class="cmt"># Saved to memory</span>
+
+<span class="prompt">claw&gt;</span> a = <span class="num">42</span>
+<span class="prompt">claw&gt;</span> <span class="kw">def</span> <span class="fn">greet</span>(name) = <span class="str">"Hello #{name}"</span>
+<span class="prompt">claw&gt;</span> exit
+
+<span class="cmt"># ... restart ...</span>
+
+<span class="prompt">claw&gt;</span> a          <span class="cmt"># =&gt; 42</span>
+<span class="prompt">claw&gt;</span> greet(<span class="str">"world"</span>)  <span class="cmt"># =&gt; "Hello world"</span>
+<span class="prompt">claw&gt;</span> what auth does our API use?
+<span class="cmt"># =&gt; "OAuth2 — I remembered this from a previous session"</span></pre>
+  </div>
+
+  <div class="ib" style="margin-top:32px">
+    <code><span class="d">$ </span><span style="color:var(--gr)">gem install ruby-claw</span></code>
+  </div>
+  <p style="font-size:.85rem;color:var(--dim)">or <code style="color:var(--dim)">gem "ruby-claw"</code> in your Gemfile</p>
+</div>
+
+<!-- Features -->
+<section id="features">
+  <h2>Features</h2>
+  <p class="lead">Everything an AI agent needs: chat, memory, persistence, and knowledge — all in Ruby.</p>
+  <div class="grid">
+    <div class="card">
+      <h3>💬 Interactive Chat REPL</h3>
+      <p>Auto-detects Ruby code vs natural language. Streaming markdown output. <code>!</code> prefix forces Ruby eval. Run with <code>Claw.chat</code> or just <code>claw</code> from the command line.</p>
+    </div>
+    <div class="card">
+      <h3>🧠 Persistent Memory</h3>
+      <p>Human-readable Markdown files in <code>.mana/</code>. The LLM can <code>remember</code> facts that persist across sessions. Edit memories by hand anytime.</p>
+    </div>
+    <div class="card">
+      <h3>💾 Runtime Persistence</h3>
+      <p>Variables and method definitions survive across sessions. Values serialized to JSON, definitions saved as <code>.rb</code> files. Pick up exactly where you left off.</p>
+    </div>
+    <div class="card">
+      <h3>🗜️ Memory Compaction</h3>
+      <p>When conversation grows large, old messages are automatically summarized in the background. Keyword search injects only the most relevant memories into prompts.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Example -->
+<section id="example">
+  <h2>Chat in action</h2>
+  <p class="lead">A full agent session showing memory, persistence, and natural language interaction.</p>
+
+  <div class="ex">
+    <h3>Session 1 — Working with code and memory</h3>
+<pre><span class="prompt">claw&gt;</span> users = [<span class="str">"Alice"</span>, <span class="str">"Bob"</span>, <span class="str">"Charlie"</span>]
+
+<span class="prompt">claw&gt;</span> sort these users by name length
+<span class="cmt"># =&gt; ["Bob", "Alice", "Charlie"]</span>
+
+<span class="prompt">claw&gt;</span> remember that our team has 3 members
+
+<span class="prompt">claw&gt;</span> <span class="kw">def</span> <span class="fn">team_size</span> = users.length
+<span class="prompt">claw&gt;</span> exit</pre>
+  </div>
+
+  <div class="ex">
+    <h3>Session 2 — Everything restored</h3>
+<pre><span class="cmt"># Restart claw — variables, methods, and memories are all back</span>
+
+<span class="prompt">claw&gt;</span> users        <span class="cmt"># =&gt; ["Alice", "Bob", "Charlie"]</span>
+<span class="prompt">claw&gt;</span> team_size    <span class="cmt"># =&gt; 3</span>
+
+<span class="prompt">claw&gt;</span> how many people are on our team?
+<span class="cmt"># =&gt; "3 — Alice, Bob, and Charlie"</span></pre>
+  </div>
+
+  <div class="ex">
+    <h3>Memory layout</h3>
+<pre><span class="cmt">.mana/</span>
+  MEMORY.md       <span class="cmt"># Long-term facts (editable!)</span>
+  session.md      <span class="cmt"># Conversation summary</span>
+  values.json     <span class="cmt"># Variable snapshots</span>
+  definitions.rb  <span class="cmt"># Method definitions</span>
+  log/
+    2026-03-27.md  <span class="cmt"># Daily interaction log</span></pre>
+  </div>
+</section>
+
+<!-- Powered by mana -->
+<section style="text-align:center">
+  <p style="color:var(--dim);font-size:.95rem;margin-bottom:8px">
+    <strong style="color:var(--tx)">ruby-mana</strong> = Embedded LLM engine &nbsp;&middot;&nbsp;
+    <strong style="color:var(--tx)">ruby-claw</strong> = Agent framework
+  </p>
+  <a class="mana-link" href="https://twokidscarl.github.io/ruby-mana/">Powered by ruby-mana 🔮 &rarr;</a>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    <a href="https://github.com/twokidsCarl/ruby-claw">GitHub</a> &middot;
+    <a href="https://rubygems.org/gems/ruby-claw">RubyGems</a> &middot;
+    <a href="https://github.com/twokidsCarl/ruby-mana">ruby-mana</a> &middot;
+    MIT License
+  </p>
+  <p style="margin-top:8px">Ruby 3.3+ &middot; Built on ruby-mana &middot; MIT licensed</p>
+</footer>
+
+</div>
+
+</body>
+</html>

@@ -118,6 +118,13 @@ module Claw
 
     # --- Overrides ---
 
+    # Store a fact and log it
+    def remember(content)
+      entry = super
+      claw_store.append_log(title: "Remembered", detail: "- #{content}") if entry
+      entry
+    end
+
     # Clear also clears session data
     def clear!
       super
@@ -142,6 +149,7 @@ module Claw
 
     # Compact short-term memory: summarize old messages and keep only recent rounds.
     # Merges existing summaries + old messages into a single new summary.
+    # Logs the compaction event to the daily log.
     def perform_compaction
       keep_recent = Claw.config.memory_keep_recent
       user_indices = short_term.each_with_index
@@ -190,6 +198,7 @@ module Claw
       @summaries = [summary]
 
       Claw.config.on_compact&.call(summary)
+      claw_store.append_log(title: "Memory compacted", detail: "- Summaries updated")
     end
 
     # Call the LLM to produce a concise summary of conversation text.
