@@ -27,6 +27,7 @@ module Claw
       require "reline"
       load_history
       load_compiled_methods(caller_binding)
+      restore_runtime(caller_binding)
       puts "#{DIM}Claw agent · type 'exit' to quit#{RESET}"
       puts
 
@@ -46,7 +47,8 @@ module Claw
         puts
       end
 
-      # Save session on exit
+      # Save state on exit
+      save_runtime(caller_binding)
       Claw.memory&.save_session
       save_history
       puts "#{DIM}bye!#{RESET}"
@@ -83,6 +85,40 @@ module Claw
       # Don't crash on cache loading failure
     end
     private_class_method :load_compiled_methods
+
+    # Save Ruby runtime state (variables + method definitions) to .mana/
+    def self.save_runtime(caller_binding)
+      return unless Claw.config.persist_session
+      dir = File.join(Dir.pwd, ".mana")
+      Claw::Serializer.save(caller_binding, dir)
+    rescue => e
+      $stderr.puts "#{DIM}  ⚠ could not save runtime: #{e.message}#{RESET}" if Mana.config.verbose
+    end
+    private_class_method :save_runtime
+
+    # Restore Ruby runtime state from .mana/
+    def self.restore_runtime(caller_binding)
+      return unless Claw.config.persist_session
+      dir = File.join(Dir.pwd, ".mana")
+      return unless File.exist?(File.join(dir, "values.json")) || File.exist?(File.join(dir, "definitions.rb"))
+
+      warnings = Claw::Serializer.restore(caller_binding, dir)
+      warnings.each { |w| puts "#{DIM}  ⚠ #{w}#{RESET}" } if warnings.any?
+      puts "#{DIM}  ✓ runtime restored#{RESET}"
+    rescue => e
+      puts "#{DIM}  ⚠ could not restore runtime: #{e.message}#{RESET}"
+    end
+    private_class_method :restore_runtime
+
+    # Track method definitions for session persistence
+    def self.track_definition(caller_binding, code, method_name)
+      receiver = caller_binding.receiver
+      defs = receiver.instance_variable_defined?(:@__claw_definitions__) ?
+        receiver.instance_variable_get(:@__claw_definitions__) : {}
+      defs[method_name.to_s] = code
+      receiver.instance_variable_set(:@__claw_definitions__, defs)
+    end
+    private_class_method :track_definition
 
     def self.save_history
       lines = Reline::HISTORY.to_a.last(HISTORY_MAX)
@@ -124,9 +160,16 @@ module Claw
 
     def self.eval_ruby(caller_binding, code)
       result = caller_binding.eval(code)
+      # Track method definitions: `def method_name` returns a Symbol in Ruby 3+
+      track_definition(caller_binding, code, result) if result.is_a?(Symbol) && code.strip.match?(/\Adef\s/)
       puts "#{RUBY_PREFIX}#{result.inspect}"
     rescue NameError, NoMethodError => e
-      block_given? ? yield : puts("#{ERROR_COLOR}#{e.class}: #{e.message}#{RESET}")
+      # Fallback to LLM for natural language (multi-word or non-ASCII like Chinese)
+      if block_given? && (code.include?(" ") || code.match?(/[^\x00-\x7F]/))
+        yield
+      else
+        puts "#{ERROR_COLOR}#{e.class}: #{e.message}#{RESET}"
+      end
     rescue => e
       puts "#{ERROR_COLOR}#{e.class}: #{e.message}#{RESET}"
     end
