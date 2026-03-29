@@ -10,6 +10,7 @@ RSpec.describe Claw::Memory do
     Mana.configure do |c|
       c.api_key = "test-key"
       c.memory_path = tmpdir
+      c.memory_class = Claw::Memory
     end
   end
 

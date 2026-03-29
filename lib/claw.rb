@@ -35,16 +35,7 @@ module Claw
   end
 end
 
-# Override Mana::Memory.current to return Claw::Memory instances.
-# This is the key integration point — when claw is loaded, all memory is enhanced.
-class Mana::Memory
-  class << self
-    alias_method :_original_current, :current
-
-    def current
-      return nil if incognito?
-
-      Thread.current[:mana_memory] ||= Claw::Memory.new
-    end
-  end
-end
+# Register Claw's enhanced implementations via Mana's provider interfaces.
+# No monkey-patching — Mana reads these from its config.
+Mana.config.memory_class = Claw::Memory
+Mana.config.knowledge_provider = Claw::Knowledge
