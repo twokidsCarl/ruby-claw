@@ -76,6 +76,7 @@
     <div class="lk">
       <a href="#features">Features</a>
       <a href="#example">Example</a>
+      <a href="#architecture">Architecture</a>
       <a href="https://github.com/twokidsCarl/ruby-claw">GitHub</a>
       <a href="https://rubygems.org/gems/ruby-claw">RubyGems</a>
     </div>
@@ -123,11 +124,15 @@
     </div>
     <div class="card">
       <h3>🧠 Persistent Memory</h3>
-      <p>Human-readable Markdown files in <code>.mana/</code>. The LLM can <code>remember</code> facts that persist across sessions. Edit memories by hand anytime.</p>
+      <p>Independent <code>Claw::Memory</code> — standalone memory layer, not inherited from mana. The <code>remember</code> tool is a claw-layer feature, registered via Mana's tool interface. Human-readable Markdown in <code>.mana/</code>. Edit memories by hand anytime.</p>
     </div>
     <div class="card">
       <h3>💾 Runtime Persistence</h3>
       <p>Variables and method definitions survive across sessions. Values serialized to JSON, definitions saved as <code>.rb</code> files. Pick up exactly where you left off.</p>
+    </div>
+    <div class="card">
+      <h3>🔒 Incognito Mode</h3>
+      <p>Wrap any block in <code>Claw.incognito { ... }</code> to prevent long-term memory from being loaded or saved. Own incognito mechanism — independent of the mana engine.</p>
     </div>
     <div class="card">
       <h3>🗜️ Memory Compaction</h3>
@@ -166,6 +171,18 @@
   </div>
 
   <div class="ex">
+    <h3>Incognito mode</h3>
+<pre><span class="cmt"># No memories loaded or saved inside the block</span>
+<span class="fn">Claw</span>.incognito <span class="kw">do</span>
+  <span class="prompt">claw&gt;</span> what is my API key?
+  <span class="cmt"># =&gt; "No memories available in incognito mode"</span>
+
+  <span class="prompt">claw&gt;</span> remember this secret token
+  <span class="cmt"># =&gt; (not saved — incognito active)</span>
+<span class="kw">end</span></pre>
+  </div>
+
+  <div class="ex">
     <h3>Memory layout</h3>
 <pre><span class="cmt">.mana/</span>
   MEMORY.md       <span class="cmt"># Long-term facts (editable!)</span>
@@ -177,13 +194,23 @@
   </div>
 </section>
 
-<!-- Powered by mana -->
-<section style="text-align:center">
-  <p style="color:var(--dim);font-size:.95rem;margin-bottom:8px">
-    <strong style="color:var(--tx)">ruby-mana</strong> = Embedded LLM engine &nbsp;&middot;&nbsp;
-    <strong style="color:var(--tx)">ruby-claw</strong> = Agent framework
-  </p>
-  <a class="mana-link" href="https://twokidscarl.github.io/ruby-mana/">Powered by ruby-mana 🔮 &rarr;</a>
+<!-- Architecture -->
+<section id="architecture">
+  <h2>Architecture</h2>
+  <p class="lead">Claw is an independent agent layer that delegates LLM calls to ruby-mana.</p>
+  <div class="grid">
+    <div class="card">
+      <h3>Independent <code>Claw::Memory</code></h3>
+      <p>Standalone memory system — does not inherit from Mana. Owns its own storage, compaction, and incognito mechanism.</p>
+    </div>
+    <div class="card">
+      <h3>Tool Registration with Mana</h3>
+      <p>Claw features like <code>remember</code> are registered as tools via Mana's tool interface. The mana engine handles execution; claw defines behavior.</p>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:32px">
+    <a class="mana-link" href="https://twokidscarl.github.io/ruby-mana/">Powered by ruby-mana 🔮 &rarr;</a>
+  </div>
 </section>
 
 <!-- Footer -->

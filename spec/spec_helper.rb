@@ -28,8 +28,13 @@ RSpec.configure do |config|
   config.before(:each) do
     Claw.reset!
     Mana.reset!
-    # Ensure Claw::Memory is used after reset
+    # Ensure clean thread-local state
+    Thread.current[:claw_memory] = nil
+    Thread.current[:claw_incognito] = nil
+    Thread.current[:mana_context] = nil
     Thread.current[:mana_memory] = nil
+    # Re-register claw's tools after reset (reset clears them)
+    load File.expand_path("../../lib/claw.rb", __FILE__)
   end
 end
 

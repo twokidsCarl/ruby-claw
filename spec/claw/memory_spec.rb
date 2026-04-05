@@ -10,7 +10,6 @@ RSpec.describe Claw::Memory do
     Mana.configure do |c|
       c.api_key = "test-key"
       c.memory_path = tmpdir
-      c.memory_class = Claw::Memory
     end
   end
 
@@ -35,12 +34,13 @@ RSpec.describe Claw::Memory do
   describe "#compact!" do
     it "summarizes old messages and keeps recent rounds" do
       memory = described_class.new
+      context = Mana::Context.current
       Claw.configure { |c| c.memory_keep_recent = 1 }
 
-      # Add multiple conversation rounds
+      # Add multiple conversation rounds to context
       6.times do |i|
-        memory.short_term << { role: "user", content: "Question #{i}" }
-        memory.short_term << { role: "assistant", content: "Answer #{i}" }
+        context.messages << { role: "user", content: "Question #{i}" }
+        context.messages << { role: "assistant", content: "Answer #{i}" }
       end
 
       # Stub the LLM summarization call
@@ -49,9 +49,9 @@ RSpec.describe Claw::Memory do
       memory.compact!
 
       # Should have kept only the last round + compacted the rest
-      user_messages = memory.short_term.select { |m| m[:role] == "user" && m[:content].is_a?(String) }
+      user_messages = context.messages.select { |m| m[:role] == "user" && m[:content].is_a?(String) }
       expect(user_messages.size).to eq(1)
-      expect(memory.summaries.size).to eq(1)
+      expect(context.summaries.size).to eq(1)
     end
   end
 
@@ -67,6 +67,35 @@ RSpec.describe Claw::Memory do
       content = File.read(log_files.first)
       expect(content).to include("Remembered")
       expect(content).to include("User prefers concise output")
+    end
+
+    it "deduplicates identical content" do
+      memory = described_class.new
+      entry1 = memory.remember("same fact")
+      entry2 = memory.remember("same fact")
+      expect(entry1).to equal(entry2)
+      expect(memory.long_term.size).to eq(1)
+    end
+
+    it "persists to disk immediately" do
+      memory = described_class.new
+      memory.remember("persisted fact")
+      store = Mana.config.memory_store || Mana::FileStore.new(tmpdir)
+      # Verify via new memory instance
+      memory2 = described_class.new
+      expect(memory2.long_term.size).to eq(1)
+      expect(memory2.long_term.first[:content]).to eq("persisted fact")
+    end
+  end
+
+  describe "#forget" do
+    it "removes a specific long-term memory by ID" do
+      memory = described_class.new
+      memory.remember("keep this")
+      memory.remember("forget this")
+      memory.forget(id: 2)
+      expect(memory.long_term.size).to eq(1)
+      expect(memory.long_term.first[:content]).to eq("keep this")
     end
   end
 
@@ -105,8 +134,9 @@ RSpec.describe Claw::Memory do
       Mana.configure { |c| c.memory_path = tmpdir }
 
       memory = described_class.new
-      memory.short_term << { role: "user", content: "Hello" }
-      memory.short_term << { role: "assistant", content: "Hi there" }
+      context = Mana::Context.current
+      context.messages << { role: "user", content: "Hello" }
+      context.messages << { role: "assistant", content: "Hi there" }
       memory.save_session
 
       # Verify session.md was created
@@ -115,11 +145,14 @@ RSpec.describe Claw::Memory do
       content = File.read(session_path)
       expect(content).to include("# Session State")
 
-      # Create a new memory instance and verify session loaded
+      # Create a new context + memory and verify session loaded
+      Thread.current[:mana_context] = nil
+      Thread.current[:claw_memory] = nil
       Claw.configure { |c| c.persist_session = true }
       memory2 = described_class.new
-      expect(memory2.short_term.size).to eq(2)
-      expect(memory2.short_term.first[:content]).to eq("Hello")
+      context2 = Mana::Context.current
+      expect(context2.messages.size).to eq(2)
+      expect(context2.messages.first[:content]).to eq("Hello")
     end
   end
 
@@ -129,25 +162,82 @@ RSpec.describe Claw::Memory do
       Mana.configure { |c| c.memory_path = tmpdir }
 
       memory = described_class.new
-      memory.short_term << { role: "user", content: "Hello" }
+      context = Mana::Context.current
+      context.messages << { role: "user", content: "Hello" }
       memory.save_session
       memory.clear!
 
       # Verify session file is also cleared
+      Thread.current[:mana_context] = nil
+      Thread.current[:claw_memory] = nil
       memory2 = described_class.new
-      expect(memory2.short_term).to be_empty
+      context2 = Mana::Context.current
+      expect(context2.messages).to be_empty
     end
   end
 
-  describe "Mana::Memory.current integration" do
+  describe "Claw::Memory.current" do
     it "returns a Claw::Memory instance" do
-      expect(Mana::Memory.current).to be_a(Claw::Memory)
+      expect(described_class.current).to be_a(Claw::Memory)
+    end
+
+    it "is separate from Mana::Context.current" do
+      claw_mem = described_class.current
+      mana_ctx = Mana::Context.current
+      expect(claw_mem).not_to equal(mana_ctx)
+      expect(mana_ctx).to be_a(Mana::Context)
     end
 
     it "returns nil in incognito mode" do
-      Mana::Memory.incognito do
-        expect(Mana::Memory.current).to be_nil
+      Claw::Memory.incognito do
+        expect(described_class.current).to be_nil
       end
+    end
+  end
+
+  describe "remember tool registration" do
+    it "registers remember tool in Mana" do
+      names = Mana.registered_tools.map { |t| t[:name] }
+      expect(names).to include("remember")
+    end
+
+    it "remember tool handler stores to Claw memory" do
+      handler = Mana.tool_handlers["remember"]
+      expect(handler).not_to be_nil
+
+      result = handler.call({ "content" => "test fact" })
+      expect(result).to include("Remembered")
+
+      memory = Claw.memory
+      expect(memory.long_term.size).to eq(1)
+      expect(memory.long_term.first[:content]).to eq("test fact")
+    end
+  end
+
+  describe "prompt section registration" do
+    it "injects long-term memories into prompt" do
+      memory = described_class.current
+      memory.remember("User likes Ruby")
+
+      sections = Mana.prompt_sections.map(&:call).compact
+      combined = sections.join("\n")
+      expect(combined).to include("Long-term memories")
+      expect(combined).to include("User likes Ruby")
+    end
+  end
+
+  describe "#token_count" do
+    it "counts long-term memories" do
+      memory = described_class.new
+      memory.remember("a fact to remember")
+      expect(memory.token_count).to be > 0
+    end
+
+    it "includes context messages in count" do
+      memory = described_class.new
+      context = Mana::Context.current
+      context.messages << { role: "user", content: "hello world" }
+      expect(memory.token_count).to be > 0
     end
   end
 end
