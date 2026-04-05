@@ -62,6 +62,17 @@ claw> greet("world")  # => "Hello world"
 ### Memory Compaction
 When conversation grows large, old messages are automatically summarized in the background.
 
+### Incognito Mode
+Temporarily disable memory loading and saving:
+```ruby
+Claw.incognito do
+  ~"translate <text> to French, store in <french>"
+  # No memories loaded, nothing remembered
+end
+
+Claw::Memory.incognito?  # => true inside the block
+```
+
 ### Keyword Memory Search
 With many memories (>20), only the most relevant are injected into prompts.
 
@@ -84,7 +95,17 @@ Mana.configure do |c|
 end
 ```
 
-## Relationship with ruby-mana
+## Architecture
+
+Claw extends mana via its tool registration interface — no monkey-patching:
+
+```ruby
+# Claw registers the "remember" tool into mana's engine
+Mana.register_tool(remember_tool_definition) { |input| ... }
+
+# Claw injects long-term memories into mana's system prompt
+Mana.register_prompt_section { |context| memory_text }
+```
 
 - **ruby-mana** = Embedded LLM engine (`~"..."` syntax, binding manipulation, tool calling)
 - **ruby-claw** = Agent framework (chat REPL, memory, persistence, knowledge)
