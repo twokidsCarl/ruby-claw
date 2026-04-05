@@ -4,4 +4,21 @@
 require "dotenv/load" rescue nil
 require "claw"
 
-Claw.chat
+case ARGV.first
+when "init"
+  Claw::Init.run
+when "version", "--version", "-v"
+  puts "claw #{Claw::VERSION}"
+when "help", "--help", "-h"
+  puts <<~HELP
+    Usage: claw [command]
+
+    Commands:
+      (none)    Start interactive chat
+      init      Initialize a new Claw project in the current directory
+      version   Show version
+      help      Show this message
+  HELP
+else
+  Claw.chat
+end
