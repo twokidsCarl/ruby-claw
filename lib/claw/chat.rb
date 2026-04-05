@@ -19,7 +19,7 @@ module Claw
 
     CONT_PROMPT  = "\e[2m  \e[0m"
     EXIT_COMMANDS = /\A(exit|quit|bye|q)\z/i
-    SLASH_COMMANDS = %w[snapshot rollback diff history status].freeze
+    SLASH_COMMANDS = %w[snapshot rollback diff history status evolve].freeze
 
     HISTORY_FILE = File.join(Dir.home, ".claw_history")
     HISTORY_MAX  = 1000
@@ -210,6 +210,26 @@ module Claw
 
       when "status"
         puts @runtime.to_md
+
+      when "evolve"
+        claw_dir = File.join(Dir.pwd, ".ruby-claw")
+        unless File.directory?(claw_dir)
+          puts "#{DIM}No .ruby-claw/ directory — run `claw init` first#{RESET}"
+          return
+        end
+        puts "#{DIM}  ⚡ running evolution cycle...#{RESET}"
+        evo = Claw::Evolution.new(runtime: @runtime, claw_dir: claw_dir)
+        result = evo.evolve
+        case result[:status]
+        when :accept
+          puts "#{RESULT_COLOR}  ✓ accepted: #{result[:proposal]}#{RESET}"
+          puts "#{DIM}    #{result[:rationale]}#{RESET}" if result[:rationale]
+        when :reject
+          puts "#{TOOL_COLOR}  ✗ rejected: #{result[:proposal] || 'n/a'}#{RESET}"
+          puts "#{DIM}    #{result[:reason]}#{RESET}"
+        when :skip
+          puts "#{DIM}  · skipped: #{result[:reason]}#{RESET}"
+        end
       end
     rescue => e
       puts "#{ERROR_COLOR}#{e.class}: #{e.message}#{RESET}"

@@ -16,6 +16,7 @@ require_relative "claw/resources/binding_resource"
 require_relative "claw/serializer"
 require_relative "claw/trace"
 require_relative "claw/init"
+require_relative "claw/evolution"
 require_relative "claw/chat"
 
 module Claw
