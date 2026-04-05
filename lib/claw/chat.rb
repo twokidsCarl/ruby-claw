@@ -333,6 +333,9 @@ module Claw
           puts "#{CLAW_PREFIX}#{display}" if display
         end
 
+        # Write execution trace
+        write_trace(engine.trace_data) if engine.trace_data
+
         # Schedule compaction after each exchange
         Claw.memory&.schedule_compaction
         append_interaction_log(input, result)
@@ -342,6 +345,18 @@ module Claw
       end
     end
     private_class_method :run_claw
+
+    # --- Trace writing ---
+
+    def self.write_trace(trace_data)
+      claw_dir = File.join(Dir.pwd, ".ruby-claw")
+      return unless File.directory?(claw_dir)
+
+      Claw::Trace.write(trace_data, claw_dir)
+    rescue => e
+      $stderr.puts "#{DIM}  ⚠ trace write failed: #{e.message}#{RESET}" if Mana.config.verbose
+    end
+    private_class_method :write_trace
 
     # --- Interaction logging ---
 
