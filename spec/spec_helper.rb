@@ -58,7 +58,7 @@ module AnthropicHelper
       .to_return(
         status: 200,
         headers: { "Content-Type" => "application/json" },
-        body: JSON.generate({ content: content })
+        body: JSON.generate({ content: content, usage: { input_tokens: 10, output_tokens: 5 } })
       )
   end
 
@@ -68,7 +68,8 @@ module AnthropicHelper
         status: 200,
         headers: { "Content-Type" => "application/json" },
         body: JSON.generate({
-          content: [{ type: "tool_use", id: "toolu_0", name: "done", input: { result: result } }]
+          content: [{ type: "tool_use", id: "toolu_0", name: "done", input: { result: result } }],
+          usage: { input_tokens: 10, output_tokens: 5 }
         })
       )
   end
@@ -79,7 +80,8 @@ module AnthropicHelper
         status: 200,
         headers: { "Content-Type" => "application/json" },
         body: JSON.generate({
-          content: [{ type: "text", text: text }]
+          content: [{ type: "text", text: text }],
+          usage: { input_tokens: 10, output_tokens: 5 }
         })
       )
   end
@@ -90,7 +92,7 @@ module AnthropicHelper
       stub = stub.to_return(
         status: 200,
         headers: { "Content-Type" => "application/json" },
-        body: JSON.generate({ content: resp })
+        body: JSON.generate({ content: resp, usage: { input_tokens: 10, output_tokens: 5 } })
       )
     end
     stub

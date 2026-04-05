@@ -75,7 +75,7 @@ module Claw
           Claw::Serializer can save and restore local variables and method definitions.
           - Claw::Serializer.save(binding, dir) — saves values.json + definitions.rb
           - Claw::Serializer.restore(binding, dir) — restores from saved files
-          - Values: Marshal.dump (hex encoded) with JSON fallback
+          - Values: MarshalMd.dump (human-readable Markdown) with JSON fallback
           - Definitions: tracked via @__claw_definitions__ on the receiver
         TEXT
       end

@@ -31,12 +31,18 @@ Claw stores memories as human-readable Markdown in `.ruby-claw/`:
 
 ```
 .ruby-claw/
-  MEMORY.md       # Long-term facts (editable!)
-  session.md      # Conversation summary
-  values.json     # Variable snapshots
-  definitions.rb  # Method definitions
+  MEMORY.md          # Long-term facts (editable!)
+  session.md         # Conversation summary
+  system_prompt.md   # Custom agent personality
+  values.json        # Variable snapshots
+  definitions.rb     # Method definitions
   log/
-    2026-03-29.md  # Daily interaction log
+    2026-03-29.md    # Daily interaction log
+  traces/
+    20260405_103000.md  # Execution traces
+  evolution/
+    20260405_accept.md  # Evolution logs
+  gems/              # Editable gem source (after claw init)
 ```
 
 The LLM can `remember` facts that persist across sessions:
@@ -75,6 +81,81 @@ Claw::Memory.incognito?  # => true inside the block
 
 ### Keyword Memory Search
 With many memories (>20), only the most relevant are injected into prompts.
+
+### Reversible Runtime
+
+Snapshot and rollback the entire agent state (context, memory, variables, filesystem):
+
+```
+claw> /snapshot before-refactor
+  ✓ snapshot #2 created (before-refactor)
+
+claw> # ... make changes ...
+
+claw> /rollback 2
+  ✓ rolled back to snapshot #2
+```
+
+**REPL commands:**
+| Command | Description |
+|---------|-------------|
+| `/snapshot [label]` | Snapshot all resources |
+| `/rollback <id>` | Rollback to a snapshot |
+| `/diff [id_a id_b]` | Show diff between snapshots |
+| `/history` | List all snapshots |
+| `/status` | Show current resource state |
+| `/evolve` | Run a self-evolution cycle |
+
+### Execution Traces
+
+Every LLM interaction is logged as a Markdown file in `.ruby-claw/traces/`:
+
+```markdown
+# Task: compute average of numbers
+- Model: claude-sonnet-4-20250514
+- Steps: 2
+- Total tokens: 1100 in / 350 out
+- Total latency: 1400ms
+
+## Step 1
+- Latency: 800ms
+- Tokens: 500 in / 200 out
+### Tool calls
+- **read_var**(name: "numbers") -> [1, 2, 3]
+```
+
+### Project Scaffolding
+
+Initialize a project with editable gem source for self-evolution:
+
+```bash
+claw init
+```
+
+Creates:
+```
+.ruby-claw/
+  gems/
+    ruby-claw/    # Editable source
+    ruby-mana/
+  system_prompt.md  # Customizable agent personality
+  MEMORY.md
+  .git/             # Filesystem snapshots
+```
+
+### Self-Evolution
+
+The agent can improve its own code:
+
+```
+claw> /evolve
+  ⚡ running evolution cycle...
+  ✓ accepted: Improve error message specificity
+```
+
+Flow: read traces → LLM diagnoses improvement → fork runtime → apply change → run tests → keep or rollback.
+
+Evolution logs are written to `.ruby-claw/evolution/`.
 
 ## Configuration
 

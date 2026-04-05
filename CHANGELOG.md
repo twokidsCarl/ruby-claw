@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.1.5] - 2026-04-05
+
+### Added
+- `Claw::Evolution` — self-evolution loop: reads traces, LLM diagnosis, fork/apply/test/keep-or-rollback
+- `/evolve` REPL command to trigger an evolution cycle
+- Evolution logs written to `.ruby-claw/evolution/`
+
+## [0.1.4] - 2026-04-05
+
+### Added
+- `Claw::Init` — `claw init` scaffolds a new project with editable gem source
+- Clones ruby-claw and ruby-mana to `.ruby-claw/gems/`
+- Generates Gemfile with `path:` references, `system_prompt.md`, empty `MEMORY.md`
+- Initializes git repo in `.ruby-claw/` with initial commit
+- CLI subcommands: `claw init`, `claw version`, `claw help`
+
+## [0.1.3] - 2026-04-05
+
+### Added
+- `Claw::Trace` — writes per-task Markdown trace files to `.ruby-claw/traces/`
+- Traces capture timing, token usage, and tool call details per LLM iteration
+- Auto-writes traces after each chat execution
+
+### Changed
+- Serializer `encode_value` now uses `MarshalMd.dump` instead of `Marshal.dump`
+- Backward compatibility: old `"marshal"` type entries still decoded via `Marshal.load`
+- `BindingResource` and all resources use MarshalMd for deep copy
+- Added `marshal-md` gem dependency
+
 ## [0.1.2] - 2026-04-04
 
 ### Changed

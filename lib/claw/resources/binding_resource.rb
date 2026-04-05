@@ -8,7 +8,7 @@ module Claw
     # after each eval. Non-serializable variables are automatically excluded
     # with a warning.
     #
-    # Serialization: MarshalMd.dump (v4 will switch to marshal-md).
+    # Serialization: MarshalMd.dump for human-readable Markdown snapshots.
     class BindingResource
       include Claw::Resource
 
