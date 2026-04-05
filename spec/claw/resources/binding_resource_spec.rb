@@ -41,22 +41,22 @@ RSpec.describe Claw::Resources::BindingResource do
 
     it "captures current values" do
       token = resource.snapshot!
-      expect(Marshal.load(token["a"])).to eq(42)
-      expect(Marshal.load(token["b"])).to eq("hello")
-      expect(Marshal.load(token["c"])).to eq([1, 2, 3])
+      expect(MarshalMd.load(token["a"])).to eq(42)
+      expect(MarshalMd.load(token["b"])).to eq("hello")
+      expect(MarshalMd.load(token["c"])).to eq([1, 2, 3])
     end
 
     it "picks up new variables added after initialization" do
       test_binding.local_variable_set(:new_var, "fresh")
       token = resource.snapshot!
       expect(token.keys).to include("new_var")
-      expect(Marshal.load(token["new_var"])).to eq("fresh")
+      expect(MarshalMd.load(token["new_var"])).to eq("fresh")
     end
 
     it "returns deep copies (mutations don't affect snapshot)" do
       token = resource.snapshot!
       test_binding.local_variable_set(:a, 999)
-      expect(Marshal.load(token["a"])).to eq(42)
+      expect(MarshalMd.load(token["a"])).to eq(42)
     end
   end
 

@@ -8,7 +8,7 @@ module Claw
     # after each eval. Non-serializable variables are automatically excluded
     # with a warning.
     #
-    # Serialization: Marshal.dump (v4 will switch to marshal-md).
+    # Serialization: MarshalMd.dump (v4 will switch to marshal-md).
     class BindingResource
       include Claw::Resource
 
@@ -33,7 +33,7 @@ module Claw
       # Restore tracked variables from a snapshot token.
       def rollback!(token)
         token.each do |name, blob|
-          value = Marshal.load(blob)
+          value = MarshalMd.load(blob)
           @binding.local_variable_set(name, value)
         end
         # Remove variables that exist now but didn't exist in the snapshot
@@ -57,15 +57,15 @@ module Claw
 
           if in_a && in_b
             if token_a[name] != token_b[name]
-              val_a = safe_inspect(Marshal.load(token_a[name]))
-              val_b = safe_inspect(Marshal.load(token_b[name]))
+              val_a = safe_inspect(MarshalMd.load(token_a[name]))
+              val_b = safe_inspect(MarshalMd.load(token_b[name]))
               lines << "~ #{name}: #{val_a} → #{val_b}"
             end
           elsif in_b
-            val = safe_inspect(Marshal.load(token_b[name]))
+            val = safe_inspect(MarshalMd.load(token_b[name]))
             lines << "+ #{name} = #{val}"
           else
-            val = safe_inspect(Marshal.load(token_a[name]))
+            val = safe_inspect(MarshalMd.load(token_a[name]))
             lines << "- #{name} = #{val}"
           end
         end
@@ -79,7 +79,7 @@ module Claw
         lines = []
         lines << "#{@tracked.size} tracked, #{@excluded.size} excluded"
         @tracked.each do |name, blob|
-          val = safe_inspect(Marshal.load(blob))
+          val = safe_inspect(MarshalMd.load(blob))
           lines << "- `#{name}` = #{val}"
         end
         @excluded.each do |name, reason|
@@ -97,7 +97,7 @@ module Claw
 
           value = @binding.local_variable_get(sym)
           begin
-            blob = Marshal.dump(value)
+            blob = MarshalMd.dump(value)
             @tracked[name] = blob
           rescue TypeError => e
             @excluded[name] = e.message

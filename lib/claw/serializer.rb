@@ -61,14 +61,14 @@ module Claw
         # Corrupted file — skip
       end
 
-      # Encode a value for JSON storage.
-      # Strategy: try Marshal (hex-encoded), fall back to JSON, skip unserializable.
+      # Encode a value for storage.
+      # Strategy: try MarshalMd (human-readable Markdown), fall back to JSON, skip unserializable.
       def encode_value(val)
-        # Try Marshal first for full Ruby fidelity
-        marshalled = Marshal.dump(val)
-        { "type" => "marshal", "data" => marshalled.unpack1("H*") }
+        # Try MarshalMd first for full Ruby fidelity + human readability
+        md = MarshalMd.dump(val)
+        { "type" => "marshal_md", "data" => md }
       rescue TypeError
-        # Marshal failed — try JSON for simple types
+        # MarshalMd failed — try JSON for simple types
         begin
           json = JSON.generate(val)
           { "type" => "json", "data" => json }
@@ -80,7 +80,10 @@ module Claw
       # Decode a value from its stored representation.
       def decode_value(entry)
         case entry["type"]
+        when "marshal_md"
+          MarshalMd.load(entry["data"])
         when "marshal"
+          # Backward compatibility: load old binary Marshal data
           Marshal.load([entry["data"]].pack("H*")) # rubocop:disable Security/MarshalLoad
         when "json"
           JSON.parse(entry["data"])

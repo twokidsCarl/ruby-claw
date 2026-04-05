@@ -18,6 +18,7 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.add_dependency "ruby-mana", ">= 0.5.11"
+  s.add_dependency "marshal-md", ">= 0.1.0"
   s.add_dependency "binding_of_caller", ">= 1.0"
   s.add_dependency "reline", ">= 0.5"
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "mana"
+require "marshal-md"
 require_relative "claw/version"
 require_relative "claw/config"
 require_relative "claw/memory_store"

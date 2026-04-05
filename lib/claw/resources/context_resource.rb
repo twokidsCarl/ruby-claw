@@ -59,7 +59,7 @@ module Claw
       private
 
       def deep_copy(obj)
-        Marshal.load(Marshal.dump(obj))
+        MarshalMd.load(MarshalMd.dump(obj))
       end
     end
   end

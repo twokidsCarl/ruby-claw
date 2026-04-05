@@ -13,12 +13,12 @@ module Claw
 
       # Deep-copy the long_term array.
       def snapshot!
-        Marshal.load(Marshal.dump(@memory.long_term))
+        MarshalMd.load(MarshalMd.dump(@memory.long_term))
       end
 
       # Restore long_term array and sync to disk.
       def rollback!(token)
-        restored = Marshal.load(Marshal.dump(token))
+        restored = MarshalMd.load(MarshalMd.dump(token))
         @memory.long_term.replace(restored)
         # Sync to MEMORY.md so file matches in-memory state
         store = @memory.send(:store)
