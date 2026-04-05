@@ -19,6 +19,7 @@ module Claw
 
     CONT_PROMPT  = "\e[2m  \e[0m"
     EXIT_COMMANDS = /\A(exit|quit|bye|q)\z/i
+    SLASH_COMMANDS = %w[snapshot rollback diff history status].freeze
 
     HISTORY_FILE = File.join(Dir.home, ".claw_history")
     HISTORY_MAX  = 1000
@@ -28,6 +29,7 @@ module Claw
       load_history
       load_compiled_methods(caller_binding)
       restore_runtime(caller_binding)
+      @runtime = init_reversible_runtime(caller_binding)
       puts "#{DIM}Claw agent · type 'exit' to quit#{RESET}"
       puts
 
@@ -37,7 +39,9 @@ module Claw
         next if input.strip.empty?
         break if input.strip.match?(EXIT_COMMANDS)
 
-        if input.start_with?("!")
+        if input.start_with?("/")
+          handle_slash_command(input.strip)
+        elsif input.start_with?("!")
           eval_ruby(caller_binding, input[1..].strip)
         elsif ruby_syntax?(input)
           eval_ruby(caller_binding, input) { run_claw(caller_binding, input) }
@@ -109,6 +113,108 @@ module Claw
       puts "#{DIM}  ⚠ could not restore runtime: #{e.message}#{RESET}"
     end
     private_class_method :restore_runtime
+
+    # --- Reversible Runtime ---
+
+    # Initialize the reversible runtime with all resource types.
+    def self.init_reversible_runtime(caller_binding)
+      runtime = Claw::Runtime.new
+
+      # Register context (mana conversation state)
+      context = Mana::Context.current
+      runtime.register("context", Claw::Resources::ContextResource.new(context))
+
+      # Register memory (claw long-term facts)
+      memory = Claw.memory
+      runtime.register("memory", Claw::Resources::MemoryResource.new(memory)) if memory
+
+      # Register binding (local variables)
+      runtime.register("binding", Claw::Resources::BindingResource.new(
+        caller_binding,
+        on_exclude: ->(name, e) {
+          puts "#{DIM}  ⚠ #{name} excluded from runtime: #{e.message}#{RESET}"
+        }
+      ))
+
+      # Register filesystem (.ruby-claw/ directory)
+      claw_dir = File.join(Dir.pwd, ".ruby-claw")
+      if File.directory?(claw_dir)
+        runtime.register("filesystem", Claw::Resources::FilesystemResource.new(claw_dir))
+      end
+
+      # Initial snapshot
+      runtime.snapshot!(label: "session_start")
+      puts "#{DIM}  ✓ runtime initialized (#{runtime.resources.size} resources)#{RESET}"
+      runtime
+    rescue => e
+      puts "#{DIM}  ⚠ runtime init failed: #{e.message}#{RESET}"
+      nil
+    end
+    private_class_method :init_reversible_runtime
+
+    # Handle /command inputs
+    def self.handle_slash_command(input)
+      cmd, *args = input.sub(/\A\//, "").split(" ", 2)
+      arg = args.first
+
+      unless SLASH_COMMANDS.include?(cmd)
+        puts "#{DIM}Unknown command: /#{cmd}#{RESET}"
+        puts "#{DIM}Available: #{SLASH_COMMANDS.map { |c| "/#{c}" }.join(', ')}#{RESET}"
+        return
+      end
+
+      unless @runtime
+        puts "#{DIM}Runtime not initialized#{RESET}"
+        return
+      end
+
+      case cmd
+      when "snapshot"
+        id = @runtime.snapshot!(label: arg || "manual")
+        puts "#{DIM}  ✓ snapshot ##{id} created#{arg ? " (#{arg})" : ""}#{RESET}"
+
+      when "rollback"
+        unless arg
+          puts "#{DIM}Usage: /rollback <id>#{RESET}"
+          return
+        end
+        @runtime.rollback!(arg.to_i)
+        puts "#{DIM}  ✓ rolled back to snapshot ##{arg}#{RESET}"
+
+      when "diff"
+        snaps = @runtime.snapshots
+        if snaps.size < 2 && !arg
+          puts "#{DIM}Need at least 2 snapshots to diff#{RESET}"
+          return
+        end
+        ids = arg ? arg.split.map(&:to_i) : [snaps[-2].id, snaps[-1].id]
+        if ids.size < 2
+          puts "#{DIM}Usage: /diff <id_a> <id_b>#{RESET}"
+          return
+        end
+        diffs = @runtime.diff(ids[0], ids[1])
+        puts "#{DIM}Diff ##{ids[0]} → ##{ids[1]}:#{RESET}"
+        diffs.each do |name, d|
+          puts "#{BOLD}  #{name}:#{RESET}"
+          d.each_line { |l| puts "    #{l.rstrip}" }
+        end
+
+      when "history"
+        if @runtime.snapshots.empty?
+          puts "#{DIM}No snapshots#{RESET}"
+        else
+          @runtime.snapshots.each do |s|
+            puts "#{DIM}  ##{s.id} #{s.label || '(unlabeled)'} — #{s.timestamp}#{RESET}"
+          end
+        end
+
+      when "status"
+        puts @runtime.to_md
+      end
+    rescue => e
+      puts "#{ERROR_COLOR}#{e.class}: #{e.message}#{RESET}"
+    end
+    private_class_method :handle_slash_command
 
     # Track method definitions for session persistence
     def self.track_definition(caller_binding, code, method_name)
