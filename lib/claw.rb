@@ -11,6 +11,7 @@ require_relative "claw/runtime"
 require_relative "claw/resources/context_resource"
 require_relative "claw/resources/memory_resource"
 require_relative "claw/resources/filesystem_resource"
+require_relative "claw/resources/binding_resource"
 require_relative "claw/serializer"
 require_relative "claw/chat"
 
