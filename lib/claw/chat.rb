@@ -65,7 +65,7 @@ module Claw
     end
     private_class_method :load_history
 
-    # Reload mana def compiled methods from .mana_cache/ on session start.
+    # Reload mana def compiled methods from .ruby-mana/cache/ on session start.
     # These are pre-compiled Ruby methods that don't need LLM calls.
     def self.load_compiled_methods(caller_binding)
       cache_dir = Mana::Compiler.cache_dir
@@ -86,20 +86,20 @@ module Claw
     end
     private_class_method :load_compiled_methods
 
-    # Save Ruby runtime state (variables + method definitions) to .mana/
+    # Save Ruby runtime state (variables + method definitions) to .ruby-claw/
     def self.save_runtime(caller_binding)
       return unless Claw.config.persist_session
-      dir = File.join(Dir.pwd, ".mana")
+      dir = File.join(Dir.pwd, ".ruby-claw")
       Claw::Serializer.save(caller_binding, dir)
     rescue => e
       $stderr.puts "#{DIM}  ⚠ could not save runtime: #{e.message}#{RESET}" if Mana.config.verbose
     end
     private_class_method :save_runtime
 
-    # Restore Ruby runtime state from .mana/
+    # Restore Ruby runtime state from .ruby-claw/
     def self.restore_runtime(caller_binding)
       return unless Claw.config.persist_session
-      dir = File.join(Dir.pwd, ".mana")
+      dir = File.join(Dir.pwd, ".ruby-claw")
       return unless File.exist?(File.join(dir, "values.json")) || File.exist?(File.join(dir, "definitions.rb"))
 
       warnings = Claw::Serializer.restore(caller_binding, dir)

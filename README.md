@@ -27,10 +27,10 @@ Or from command line: `claw`
 - Session persists across restarts
 
 ### Persistent Memory
-Claw stores memories as human-readable Markdown in `.mana/`:
+Claw stores memories as human-readable Markdown in `.ruby-claw/`:
 
 ```
-.mana/
+.ruby-claw/
   MEMORY.md       # Long-term facts (editable!)
   session.md      # Conversation summary
   values.json     # Variable snapshots

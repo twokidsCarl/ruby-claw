@@ -7,7 +7,7 @@ module Claw
   # Replaces JSON memory/session files with human-readable Markdown.
   #
   # Directory layout:
-  #   .mana/
+  #   .ruby-claw/
   #     MEMORY.md      — long-term memory
   #     session.md     — session summary
   #     values.json    — kept as-is (Marshal data)
@@ -72,7 +72,7 @@ module Claw
     private
 
     def base_dir
-      @base_path || Mana.config.memory_path || File.join(Dir.pwd, ".mana")
+      @base_path || Mana.config.memory_path || File.join(Dir.pwd, ".ruby-claw")
     end
 
     def memory_md_path
