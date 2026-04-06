@@ -2,7 +2,11 @@ source "https://rubygems.org"
 
 gemspec
 
-gem "ruby-mana", path: "../ruby-mana" unless ENV["CI"]
+if ENV["CI"]
+  gem "ruby-mana", github: "twokidsCarl/ruby-mana", branch: "main"
+else
+  gem "ruby-mana", path: "../ruby-mana"
+end
 gem "base64"  # extracted from stdlib in Ruby 3.4, needed by marshal-md
 
 group :development, :test do

@@ -20,8 +20,8 @@ jobs:
           bundler-cache: false
       - name: Configure git
         run: |
-          git config --global user.name "CI"
-          git config --global user.email "ci@test.com"
+          git config --global user.name "twokidsCarl"
+          git config --global user.email "carl@anz.io"
       - name: Install dependencies
         run: bundle install --jobs 4
       - name: Run tests
