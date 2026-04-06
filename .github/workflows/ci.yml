@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby-version: ["3.3", "3.4", "4.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: false
+      - name: Configure git
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@test.com"
+      - name: Install dependencies
+        run: bundle install --jobs 4
+      - name: Run tests
+        run: bundle exec rspec
+      - name: Check coverage
+        run: |
+          coverage=$(ruby -e "require 'json'; puts JSON.parse(File.read('coverage/.last_run.json'))['result']['line']")
+          echo "Coverage: ${coverage}%"
+          ruby -e "
+            require 'json'
+            cov = JSON.parse(File.read('coverage/.last_run.json'))['result']['line']
+            if cov < 70
+              puts '::error::Coverage #{cov}% is below 70% threshold'
+              exit 1
+            end
+          "
