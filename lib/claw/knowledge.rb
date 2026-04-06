@@ -25,7 +25,11 @@ module Claw
           "compaction"    => compaction,
           "session"       => session,
           "serializer"    => serializer,
-          "persistence"   => session
+          "persistence"   => session,
+          "tools"         => tools_section,
+          "search_tools"  => tools_section,
+          "load_tool"     => tools_section,
+          "forge"         => tools_section
         }
       end
 
@@ -66,6 +70,36 @@ module Claw
           - load_session: restores from disk (called automatically on init)
           - Stored as JSON in the sessions/ subdirectory of the memory store
           Configure via: Claw.configure { |c| c.persist_session = true }
+        TEXT
+      end
+
+      def tools_section
+        <<~TEXT
+          Tool system in Claw (three layers):
+
+          1. Core tools (always loaded): read_var, write_var, call_func, eval, etc. + remember
+          2. Project tools (on-demand): .ruby-claw/tools/*.rb — indexed at startup, loaded via load_tool
+          3. Hub tools (remote): community tools from ruby-claw-toolhub, downloaded on demand
+
+          Key tools for discovery:
+          - search_tools: search available project/hub tools by keyword
+          - load_tool: load a discovered tool into the current session
+
+          Creating tools:
+          - Write a class including Claw::Tool with tool_name, description, parameter DSL
+          - Place in .ruby-claw/tools/
+          - Or use /forge to promote an eval-defined method to a formal tool
+
+          Tool class structure:
+            class MyTool
+              include Claw::Tool
+              tool_name   "my_tool"
+              description "What it does"
+              parameter   :input, type: "String", required: true, desc: "..."
+              def call(input:)
+                # logic
+              end
+            end
         TEXT
       end
 

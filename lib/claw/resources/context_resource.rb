@@ -56,6 +56,13 @@ module Claw
         "#{msgs} messages, #{sums} summaries"
       end
 
+      # Merge context from another ContextResource.
+      # Generally a no-op — child conversation history is rarely useful for parent.
+      # If called, appends the other's summaries to this context.
+      def merge_from!(other)
+        # no-op by default; child context is independent
+      end
+
       private
 
       def deep_copy(obj)

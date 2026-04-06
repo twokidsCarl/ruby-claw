@@ -4,21 +4,45 @@
 require "dotenv/load" rescue nil
 require "claw"
 
+HELP_TEXT = <<~HELP
+  Usage: claw [command]
+
+  Commands:
+    (none)         Start TUI (default)
+    init           Initialize a new Claw project
+    status         Print runtime state
+    history        List snapshots
+    rollback ID    Rollback to snapshot
+    trace [ID]     View execution trace (list if no ID)
+    evolve         Run evolution cycle
+    benchmark run  Run benchmark suite
+    benchmark diff A B  Compare two benchmark reports
+    console        Launch web console UI
+    version        Show version
+    help           Show this message
+HELP
+
 case ARGV.first
 when "init"
   Claw::Init.run
+when "status"
+  Claw::CLI.run(:status)
+when "history"
+  Claw::CLI.run(:history)
+when "rollback"
+  Claw::CLI.run(:rollback, ARGV[1])
+when "trace"
+  Claw::CLI.run(:trace, ARGV[1])
+when "evolve"
+  Claw::CLI.run(:evolve)
+when "benchmark"
+  Claw::CLI.run(:benchmark, *ARGV[1..])
+when "console"
+  Claw::CLI.run(:console, *ARGV[1..])
 when "version", "--version", "-v"
   puts "claw #{Claw::VERSION}"
 when "help", "--help", "-h"
-  puts <<~HELP
-    Usage: claw [command]
-
-    Commands:
-      (none)    Start interactive chat
-      init      Initialize a new Claw project in the current directory
-      version   Show version
-      help      Show this message
-  HELP
+  puts HELP_TEXT
 else
-  Claw.chat
+  Claw::TUI.start(TOPLEVEL_BINDING)
 end

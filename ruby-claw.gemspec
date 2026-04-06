@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/twokidsCarl/ruby-claw"
   s.required_ruby_version = ">= 3.3"
 
-  s.files = Dir["lib/**/*.rb"] + Dir["exe/*"] + Dir["*.md"] + ["LICENSE"]
+  s.files = Dir["lib/**/*.rb"] + Dir["lib/**/*.erb"] + Dir["lib/**/*.css"] + Dir["lib/**/*.js"] + Dir["exe/*"] + Dir["*.md"] + ["LICENSE"]
   s.bindir = "exe"
   s.executables = ["claw"]
   s.require_paths = ["lib"]
@@ -21,4 +21,18 @@ Gem::Specification.new do |s|
   s.add_dependency "marshal-md", ">= 0.1.0"
   s.add_dependency "binding_of_caller", ">= 1.0"
   s.add_dependency "reline", ">= 0.5"
+
+  # Charm Ruby TUI ecosystem (V6)
+  s.add_dependency "bubbletea", ">= 0.1.0"
+  s.add_dependency "lipgloss", ">= 0.2.0"
+  s.add_dependency "bubbles", ">= 0.1.0"
+  s.add_dependency "glamour", ">= 0.2.0"
+  s.add_dependency "ntcharts", ">= 0.1.0"
+  s.add_dependency "bubblezone", ">= 0.1.0"
+  s.add_dependency "huh", ">= 1.0"
+  s.add_dependency "harmonica", ">= 0.1.0"
+
+  # Console (V10)
+  s.add_dependency "sinatra", ">= 4.0"
+  s.add_dependency "rackup", ">= 2.0"
 end

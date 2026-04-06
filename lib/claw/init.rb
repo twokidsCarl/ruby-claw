@@ -36,6 +36,8 @@ module Claw
         write_gemfile(dir, stdout)
         write_system_prompt(claw_dir, stdout)
         write_memory(claw_dir, stdout)
+        create_roles(claw_dir, stdout)
+        create_tools_dir(claw_dir, stdout)
         git_init(claw_dir, stdout)
 
         stdout.puts "  ✓ claw init complete"
@@ -102,6 +104,48 @@ module Claw
         path = File.join(claw_dir, "MEMORY.md")
         File.write(path, "# Long-term Memory\n")
         stdout.puts "  ✓ MEMORY.md created"
+      end
+
+      # Create roles/ directory with a default role.
+      def create_roles(claw_dir, stdout)
+        roles_dir = File.join(claw_dir, "roles")
+        FileUtils.mkdir_p(roles_dir)
+        default_path = File.join(roles_dir, "default.md")
+        File.write(default_path, <<~ROLE)
+          # Default Role
+
+          You are a helpful Ruby assistant with access to the runtime binding.
+          Help the user analyze data, write code, and manage their Ruby environment.
+        ROLE
+        stdout.puts "  ✓ roles/ directory created"
+      end
+
+      # Create tools/ directory for project tools.
+      def create_tools_dir(claw_dir, stdout)
+        tools_dir = File.join(claw_dir, "tools")
+        FileUtils.mkdir_p(tools_dir)
+        readme = File.join(tools_dir, "README.md")
+        File.write(readme, <<~MD) unless File.exist?(readme)
+          # Project Tools
+
+          Place `Claw::Tool` class files here. They will be indexed at startup
+          and available via `search_tools` / `load_tool`.
+
+          Example:
+          ```ruby
+          class MyTool
+            include Claw::Tool
+            tool_name   "my_tool"
+            description "Does something useful"
+            parameter   :input, type: "String", required: true, desc: "The input"
+
+            def call(input:)
+              "Result: \#{input}"
+            end
+          end
+          ```
+        MD
+        stdout.puts "  ✓ tools/ directory created"
       end
 
       # Initialize a git repo in .ruby-claw/ with an initial commit.

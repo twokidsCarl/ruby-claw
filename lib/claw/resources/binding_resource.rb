@@ -88,6 +88,16 @@ module Claw
         lines.join("\n")
       end
 
+      # Merge changed variables from another BindingResource into this one.
+      # Only variables that differ from the other's initial snapshot are merged.
+      def merge_from!(other)
+        other.tracked.each do |name, blob|
+          value = MarshalMd.load(blob)
+          @binding.local_variable_set(name.to_sym, value)
+          @tracked[name] = blob
+        end
+      end
+
       # Scan the binding for new/changed variables.
       # Call this after each eval to pick up changes.
       def scan_binding

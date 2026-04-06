@@ -152,89 +152,61 @@ module Claw
     end
     private_class_method :init_reversible_runtime
 
-    # Handle /command inputs
+    # Handle /command inputs — delegates to Claw::Commands and renders output.
     def self.handle_slash_command(input)
       cmd, *args = input.sub(/\A\//, "").split(" ", 2)
       arg = args.first
 
-      unless SLASH_COMMANDS.include?(cmd)
-        puts "#{DIM}Unknown command: /#{cmd}#{RESET}"
-        puts "#{DIM}Available: #{SLASH_COMMANDS.map { |c| "/#{c}" }.join(', ')}#{RESET}"
-        return
-      end
-
-      unless @runtime
-        puts "#{DIM}Runtime not initialized#{RESET}"
-        return
-      end
-
-      case cmd
-      when "snapshot"
-        id = @runtime.snapshot!(label: arg || "manual")
-        puts "#{DIM}  ✓ snapshot ##{id} created#{arg ? " (#{arg})" : ""}#{RESET}"
-
-      when "rollback"
-        unless arg
-          puts "#{DIM}Usage: /rollback <id>#{RESET}"
-          return
-        end
-        @runtime.rollback!(arg.to_i)
-        puts "#{DIM}  ✓ rolled back to snapshot ##{arg}#{RESET}"
-
-      when "diff"
-        snaps = @runtime.snapshots
-        if snaps.size < 2 && !arg
-          puts "#{DIM}Need at least 2 snapshots to diff#{RESET}"
-          return
-        end
-        ids = arg ? arg.split.map(&:to_i) : [snaps[-2].id, snaps[-1].id]
-        if ids.size < 2
-          puts "#{DIM}Usage: /diff <id_a> <id_b>#{RESET}"
-          return
-        end
-        diffs = @runtime.diff(ids[0], ids[1])
-        puts "#{DIM}Diff ##{ids[0]} → ##{ids[1]}:#{RESET}"
-        diffs.each do |name, d|
-          puts "#{BOLD}  #{name}:#{RESET}"
-          d.each_line { |l| puts "    #{l.rstrip}" }
-        end
-
-      when "history"
-        if @runtime.snapshots.empty?
-          puts "#{DIM}No snapshots#{RESET}"
-        else
-          @runtime.snapshots.each do |s|
-            puts "#{DIM}  ##{s.id} #{s.label || '(unlabeled)'} — #{s.timestamp}#{RESET}"
-          end
-        end
-
-      when "status"
-        puts @runtime.to_md
-
-      when "evolve"
-        claw_dir = File.join(Dir.pwd, ".ruby-claw")
-        unless File.directory?(claw_dir)
-          puts "#{DIM}No .ruby-claw/ directory — run `claw init` first#{RESET}"
-          return
-        end
-        puts "#{DIM}  ⚡ running evolution cycle...#{RESET}"
-        evo = Claw::Evolution.new(runtime: @runtime, claw_dir: claw_dir)
-        result = evo.evolve
-        case result[:status]
-        when :accept
-          puts "#{RESULT_COLOR}  ✓ accepted: #{result[:proposal]}#{RESET}"
-          puts "#{DIM}    #{result[:rationale]}#{RESET}" if result[:rationale]
-        when :reject
-          puts "#{TOOL_COLOR}  ✗ rejected: #{result[:proposal] || 'n/a'}#{RESET}"
-          puts "#{DIM}    #{result[:reason]}#{RESET}"
-        when :skip
-          puts "#{DIM}  · skipped: #{result[:reason]}#{RESET}"
-        end
-      end
-    rescue => e
-      puts "#{ERROR_COLOR}#{e.class}: #{e.message}#{RESET}"
+      result = Claw::Commands.dispatch(cmd, arg, runtime: @runtime)
+      render_command_result(result, cmd)
     end
     private_class_method :handle_slash_command
+
+    # Render a Commands result Hash to the terminal.
+    def self.render_command_result(result, cmd)
+      case result[:type]
+      when :success
+        puts "#{DIM}  ✓ #{result[:message]}#{RESET}"
+      when :error
+        puts "#{ERROR_COLOR}#{result[:message]}#{RESET}"
+        if result[:data].is_a?(Hash) && result[:data][:available]
+          puts "#{DIM}Available: #{result[:data][:available].join(', ')}#{RESET}"
+        end
+      when :info
+        puts "#{DIM}#{result[:message]}#{RESET}"
+      when :data
+        case cmd
+        when "diff"
+          data = result[:data]
+          puts "#{DIM}Diff ##{data[:from]} → ##{data[:to]}:#{RESET}"
+          data[:diffs].each do |name, d|
+            puts "#{BOLD}  #{name}:#{RESET}"
+            d.each_line { |l| puts "    #{l.rstrip}" }
+          end
+        when "history"
+          result[:data][:snapshots].each do |s|
+            puts "#{DIM}  ##{s[:id]} #{s[:label] || '(unlabeled)'} — #{s[:timestamp]}#{RESET}"
+          end
+        when "status"
+          puts result[:data][:markdown]
+        when "evolve"
+          evo = result[:data]
+          case evo[:status]
+          when :accept
+            puts "#{RESULT_COLOR}  ✓ accepted: #{evo[:proposal]}#{RESET}"
+            puts "#{DIM}    #{evo[:rationale]}#{RESET}" if evo[:rationale]
+          when :reject
+            puts "#{TOOL_COLOR}  ✗ rejected: #{evo[:proposal] || 'n/a'}#{RESET}"
+            puts "#{DIM}    #{evo[:reason]}#{RESET}"
+          when :skip
+            puts "#{DIM}  · skipped: #{evo[:reason]}#{RESET}"
+          end
+        else
+          puts "#{DIM}#{result[:message]}#{RESET}"
+        end
+      end
+    end
+    private_class_method :render_command_result
 
     # Track method definitions for session persistence
     def self.track_definition(caller_binding, code, method_name)

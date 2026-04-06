@@ -11,8 +11,11 @@ module Claw
   # is not allowed — it would break snapshot consistency.
   class Runtime
     Snapshot = Struct.new(:id, :label, :tokens, :timestamp, keyword_init: true)
+    Step = Struct.new(:number, :tool_name, :target, :elapsed_ms, keyword_init: true)
 
-    attr_reader :resources, :snapshots, :events
+    STATES = %i[idle thinking executing_tool failed].freeze
+
+    attr_reader :resources, :snapshots, :events, :state, :current_step, :children
 
     def initialize
       @resources = {}       # name => resource instance
@@ -21,6 +24,26 @@ module Claw
       @next_id = 1
       @locked = false
       @events = []          # append-only event log
+      @state = :idle
+      @current_step = nil
+      @state_callbacks = []
+      @children = {}        # id => ChildRuntime (V8)
+    end
+
+    # Transition the runtime execution state.
+    # Fires registered callbacks with (old_state, new_state, step).
+    def transition!(new_state, step: nil)
+      raise ArgumentError, "Invalid state: #{new_state}" unless STATES.include?(new_state)
+
+      old = @state
+      @state = new_state
+      @current_step = step
+      @state_callbacks.each { |cb| cb.call(old, new_state, step) }
+    end
+
+    # Register an observer for state transitions.
+    def on_state_change(&block)
+      @state_callbacks << block
     end
 
     # Register a named resource. Must be called before any snapshot.
@@ -105,9 +128,38 @@ module Claw
       }
     end
 
+    # Fork a child agent that runs in a separate thread with isolated resources.
+    # The child can later be merged back via child.merge!
+    #
+    # @param prompt [String] the task for the child to execute
+    # @param vars [Hash] variables to inject into the child's binding
+    # @param role [String, nil] optional role name for the child
+    # @param model [String, nil] optional model override
+    # @return [ChildRuntime]
+    def fork_async(prompt:, vars: {}, role: nil, model: nil)
+      child = ChildRuntime.new(
+        parent: self,
+        prompt: prompt,
+        vars: vars,
+        role: role,
+        model: model
+      )
+      @children[child.id] = child
+      child.start!
+      record_event(action: "fork_async", target: child.id, detail: prompt[0..80])
+      child
+    end
+
     # Render runtime state as Markdown.
     def to_md
       lines = ["# Runtime State\n"]
+
+      lines << "## Status"
+      lines << "- state: #{@state}"
+      if @current_step
+        lines << "- step: ##{@current_step.number} #{@current_step.tool_name} (#{@current_step.target})"
+      end
+      lines << ""
 
       lines << "## Resources"
       @resources.each do |name, resource|

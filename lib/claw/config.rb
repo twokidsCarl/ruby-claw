@@ -5,7 +5,8 @@ module Claw
   # Set via Claw.configure { |c| ... }.
   class Config
     attr_accessor :memory_pressure, :memory_keep_recent, :compact_model,
-                  :on_compact, :persist_session, :memory_top_k
+                  :on_compact, :persist_session, :memory_top_k,
+                  :tools_dir, :hub_url, :console_port
 
     def initialize
       @memory_pressure = 0.7
@@ -14,6 +15,9 @@ module Claw
       @on_compact = nil
       @persist_session = true
       @memory_top_k = 10
+      @tools_dir = nil   # auto-detect: .ruby-claw/tools/
+      @hub_url = nil     # disabled by default
+      @console_port = 4567
     end
   end
 end

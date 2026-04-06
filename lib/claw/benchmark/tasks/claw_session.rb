@@ -1,0 +1,18 @@
+# frozen_string_literal: true
+
+Claw::Benchmark::Tasks.register(
+  Claw::Benchmark::Task.new(
+    id: "claw_session",
+    layer: :claw,
+    setup: -> {
+      { counter: 0, step: 5 }
+    },
+    prompt: "Read both `counter` and `step`, then set `counter` to `counter + step`.",
+    expect: ->(b) {
+      b.local_variable_get(:counter) == 5
+    },
+    max_rounds: 3,
+    max_tokens: 2000,
+    ideal_path: %w[read_var read_var write_var]
+  )
+)

@@ -25,5 +25,11 @@ module Claw
     def to_md
       raise NotImplementedError, "#{self.class}#to_md not implemented"
     end
+
+    # Merge changes from another resource instance (e.g., child → parent).
+    # Used by V8 Multi-Agent to selectively merge child results back.
+    def merge_from!(other)
+      raise NotImplementedError, "#{self.class}#merge_from! not implemented"
+    end
   end
 end
