@@ -17,7 +17,7 @@ module Claw
         @runtime = init_runtime(caller_binding)
         @chat_history = []
         @mode = :normal  # :normal | :plan
-        @input_text = ""
+        @input_text = +""
         @input_focused = true
         @scrolled_up = false
         @text_buffer = +""  # accumulates streaming text
@@ -40,46 +40,47 @@ module Claw
 
       def init
         @chat_history << { role: :system, content: "Claw agent ready · type 'exit' to quit" }
-        cmd = @spinner.init
-        Bubbletea.batch(cmd, Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) })
+        [self, Bubbletea.batch(@spinner.tick, Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) })]
       end
 
       def update(msg)
-        case msg
-        when Bubbletea::KeyMessage
-          handle_key(msg)
-        when TickMsg
-          cmd = @spinner.update(@spinner.tick)
-          Bubbletea.batch(cmd, Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) })
-        when AgentTextMsg
-          @text_buffer << msg.text
-          Bubbletea.none
-        when ToolCallMsg
-          flush_text_buffer
-          detail = format_tool_detail(msg.name, msg.input)
-          @chat_history << { role: :tool_call, icon: "⚡", detail: detail }
-          Bubbletea.none
-        when ToolResultMsg
-          @chat_history << { role: :tool_result, result: msg.result } unless msg.result.to_s.start_with?("ok:")
-          Bubbletea.none
-        when ExecutionDoneMsg
-          flush_text_buffer
-          write_trace(msg.trace)
-          Claw.memory&.schedule_compaction
-          Bubbletea.none
-        when ExecutionErrorMsg
-          flush_text_buffer
-          @chat_history << { role: :error, content: msg.error.message }
-          Bubbletea.none
-        when CommandResultMsg
-          handle_command_result(msg)
-          Bubbletea.none
-        when StateChangeMsg
-          # Runtime state changed — triggers re-render via Bubbletea
-          Bubbletea.none
-        else
-          Bubbletea.none
-        end
+        cmd = case msg
+              when Bubbletea::KeyMessage
+                return handle_key(msg)
+              when Bubbles::Spinner::TickMessage
+                @spinner, spinner_cmd = @spinner.update(msg)
+                Bubbletea.batch(spinner_cmd, Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) })
+              when TickMsg
+                Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) }
+              when AgentTextMsg
+                @text_buffer << msg.text
+                Bubbletea.none
+              when ToolCallMsg
+                flush_text_buffer
+                detail = format_tool_detail(msg.name, msg.input)
+                @chat_history << { role: :tool_call, icon: "⚡", detail: detail }
+                Bubbletea.none
+              when ToolResultMsg
+                @chat_history << { role: :tool_result, result: msg.result } unless msg.result.to_s.start_with?("ok:")
+                Bubbletea.none
+              when ExecutionDoneMsg
+                flush_text_buffer
+                write_trace(msg.trace)
+                Claw.memory&.schedule_compaction
+                Bubbletea.none
+              when ExecutionErrorMsg
+                flush_text_buffer
+                @chat_history << { role: :error, content: msg.error.message }
+                Bubbletea.none
+              when CommandResultMsg
+                handle_command_result(msg)
+                Bubbletea.none
+              when StateChangeMsg
+                Bubbletea.none
+              else
+                Bubbletea.none
+              end
+        [self, cmd]
       end
 
       def view
@@ -111,47 +112,46 @@ module Claw
       def handle_key(msg)
         key = msg.to_s
 
-        case key
-        when "ctrl+c", "ctrl+d"
-          save_state
-          return Bubbletea.quit
-        when "enter"
-          return submit_input
-        when "pgup"
-          @chat_viewport.page_up
-          @scrolled_up = true
-          return Bubbletea.none
-        when "pgdown"
-          @chat_viewport.page_down
-          @scrolled_up = @chat_viewport.at_bottom? ? false : true
-          return Bubbletea.none
-        when "backspace"
-          @input_text = @input_text[0..-2] if @input_text.length > 0
-          return Bubbletea.none
-        end
-
-        # Regular character input
-        if key.length == 1 && key.ord >= 32
-          @input_text << key
-        end
-        Bubbletea.none
+        cmd = case key
+              when "ctrl+c", "ctrl+d"
+                save_state
+                return [self, Bubbletea.quit]
+              when "enter"
+                return submit_input
+              when "pgup"
+                @chat_viewport.page_up
+                @scrolled_up = true
+                Bubbletea.none
+              when "pgdown"
+                @chat_viewport.page_down
+                @scrolled_up = @chat_viewport.at_bottom? ? false : true
+                Bubbletea.none
+              when "backspace"
+                @input_text = @input_text[0..-2] if @input_text.length > 0
+                Bubbletea.none
+              else
+                # Regular character input
+                @input_text << key if key.length == 1 && key.ord >= 32
+                Bubbletea.none
+              end
+        [self, cmd]
       end
 
       def submit_input
         text = @input_text.strip
-        @input_text = ""
-        return Bubbletea.none if text.empty?
+        @input_text = +""
+        return [self, Bubbletea.none] if text.empty?
 
         # Busy guard — prevent concurrent LLM executions
         if @executor.running? && !text.start_with?("/") && !text.start_with?("!") && !text.match?(/\A(exit|quit|bye|q)\z/i)
           @chat_history << { role: :system, content: "Agent is busy — please wait for the current execution to finish." }
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         end
 
         # Exit
         if text.match?(/\A(exit|quit|bye|q)\z/i)
           save_state
-          return Bubbletea.quit
+          return [self, Bubbletea.quit]
         end
 
         @chat_history << { role: :user, content: text }
@@ -175,7 +175,7 @@ module Claw
         if cmd == "plan"
           @mode = @mode == :plan ? :normal : :plan
           @chat_history << { role: :system, content: "mode: #{@mode}" }
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         end
 
         # Object explorer commands
@@ -186,7 +186,7 @@ module Claw
             lines = result[:data].flat_map { |section, items| ["#{section}:", *items] }
             @chat_history << { role: :system, content: lines.join("\n") }
           end
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         when "cd"
           @nav_stack ||= []
           result = ObjectExplorer.cd(arg || "..", @caller_binding, @nav_stack)
@@ -196,7 +196,7 @@ module Claw
           else
             @chat_history << { role: :error, content: result[:message] }
           end
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         when "source"
           result = ObjectExplorer.source(arg.to_s, @caller_binding)
           if result[:type] == :data
@@ -204,11 +204,11 @@ module Claw
           else
             @chat_history << { role: :error, content: result[:message] }
           end
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         when "doc"
           result = ObjectExplorer.doc(arg.to_s, @caller_binding)
           @chat_history << { role: :system, content: result[:data][:doc].to_s }
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         when "find"
           result = ObjectExplorer.find(arg.to_s, @caller_binding)
           if result[:type] == :data
@@ -216,17 +216,17 @@ module Claw
           else
             @chat_history << { role: :system, content: result[:message] }
           end
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         when "whereami"
           result = ObjectExplorer.whereami(@caller_binding)
           d = result[:data]
           @chat_history << { role: :system, content: "#{d[:file]}:#{d[:line]} (#{d[:receiver]})" }
-          return Bubbletea.none
+          return [self, Bubbletea.none]
         end
 
         result = Claw::Commands.dispatch(cmd, arg, runtime: @runtime)
         handle_command_result(CommandResultMsg.new(result: result, cmd: cmd))
-        Bubbletea.none
+        [self, Bubbletea.none]
       end
 
       def handle_ruby(code)
@@ -241,7 +241,7 @@ module Claw
           @chat_history << { role: :error, content: "#{eval_result[:error].class}: #{eval_result[:error].message}" }
         end
         @runtime&.resources&.dig("binding")&.scan_binding
-        Bubbletea.none
+        [self, Bubbletea.none]
       end
 
       def handle_ruby_or_llm(text)
@@ -249,12 +249,12 @@ module Claw
         if eval_result[:success]
           @chat_history << { role: :ruby, content: eval_result[:result].inspect }
           @runtime&.resources&.dig("binding")&.scan_binding
-          Bubbletea.none
+          [self, Bubbletea.none]
         elsif eval_result[:error].is_a?(NameError) && (text.include?(" ") || text.match?(/[^\x00-\x7F]/))
           handle_llm(text)
         else
           @chat_history << { role: :error, content: "#{eval_result[:error].class}: #{eval_result[:error].message}" }
-          Bubbletea.none
+          [self, Bubbletea.none]
         end
       end
 
@@ -274,7 +274,7 @@ module Claw
         @executor.execute(text, @caller_binding) do |event|
           Bubbletea.send_message(event)
         end
-        Bubbletea.none
+        [self, Bubbletea.none]
       end
 
       def handle_command_result(msg)
