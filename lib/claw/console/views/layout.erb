@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claw Console</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">claw</div>
+    <nav>
+      <a href="/" class="nav-link">Dashboard</a>
+      <a href="/prompt" class="nav-link">Prompt</a>
+      <a href="/monitor" class="nav-link">Monitor</a>
+      <a href="/traces" class="nav-link">Traces</a>
+      <a href="/memory" class="nav-link">Memory</a>
+      <a href="/tools" class="nav-link">Tools</a>
+      <a href="/snapshots" class="nav-link">Snapshots</a>
+      <a href="/experiments" class="nav-link">Experiments</a>
+    </nav>
+    <div class="header-status" id="header-status"></div>
+  </header>
+  <main>
+    <%= yield %>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

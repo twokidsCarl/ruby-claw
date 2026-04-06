@@ -89,7 +89,7 @@
 <div class="hero">
   <h1>ruby-<span class="m">claw</span> 🦀</h1>
   <p class="tl">AI Agent Framework for Ruby</p>
-  <p class="sub">Persistent memory, interactive chat, session recovery. Built on <em>ruby-mana</em>.</p>
+  <p class="sub">Full-screen TUI, persistent memory, benchmark suite, multi-agent. Built on <em>ruby-mana</em>.</p>
 
   <div style="display:inline-block;max-width:540px;width:100%;text-align:left">
 <pre><span class="prompt">claw&gt;</span> remember that the API uses OAuth2
@@ -120,7 +120,7 @@
   <div class="grid">
     <div class="card">
       <h3>💬 Interactive Chat REPL</h3>
-      <p>Auto-detects Ruby code vs natural language. Streaming markdown output. <code>!</code> prefix forces Ruby eval. Run with <code>Claw.chat</code> or just <code>claw</code> from the command line.</p>
+      <p>Full-screen TUI with Charm Ruby, or legacy REPL with <code>Claw.chat</code>. Auto-detects Ruby code vs natural language. Streaming markdown output. <code>!</code> prefix forces Ruby eval.</p>
     </div>
     <div class="card">
       <h3>🧠 Persistent Memory</h3>
@@ -137,6 +137,22 @@
     <div class="card">
       <h3>🗜️ Memory Compaction</h3>
       <p>When conversation grows large, old messages are automatically summarized in the background. Keyword search injects only the most relevant memories into prompts.</p>
+    </div>
+    <div class="card">
+      <h3>🖥️ Full-Screen TUI</h3>
+      <p>Built on Charm Ruby (bubbletea). 4-zone layout: status bar, chat panel with streaming, status panel with variables/snapshots/memory, command bar. Plan mode for safe execution.</p>
+    </div>
+    <div class="card">
+      <h3>📊 Benchmark Suite</h3>
+      <p>9 built-in tasks across mana/claw/runtime/evolution layers. Scoring: correctness, efficiency, tool path accuracy. Auto-triggers evolution on regression.</p>
+    </div>
+    <div class="card">
+      <h3>👥 Multi-Agent</h3>
+      <p>Fork child agents with isolated threads. Deep-copied variables, git worktree isolation, role-based identity. Join, cancel, diff, merge.</p>
+    </div>
+    <div class="card">
+      <h3>🎭 Roles &amp; Plan Mode</h3>
+      <p>Agent identity via <code>.ruby-claw/roles/*.md</code>. Plan mode: LLM generates step-by-step plan without execution, then runs in safe fork after approval.</p>
     </div>
   </div>
 </section>
@@ -189,6 +205,8 @@
   session.md      <span class="cmt"># Conversation summary</span>
   values.json     <span class="cmt"># Variable snapshots</span>
   definitions.rb  <span class="cmt"># Method definitions</span>
+  roles/           <span class="cmt"># Agent role definitions (*.md)</span>
+  benchmarks/      <span class="cmt"># Benchmark tasks and results</span>
   log/
     2026-03-27.md  <span class="cmt"># Daily interaction log</span></pre>
   </div>
@@ -221,7 +239,7 @@
     <a href="https://github.com/twokidsCarl/ruby-mana">ruby-mana</a> &middot;
     MIT License
   </p>
-  <p style="margin-top:8px">Ruby 3.3+ &middot; Built on ruby-mana &middot; MIT licensed</p>
+  <p style="margin-top:8px">Ruby 3.3+ &middot; V8 Multi-Agent &middot; Built on ruby-mana</p>
 </footer>
 
 </div>

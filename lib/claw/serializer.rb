@@ -114,7 +114,7 @@ module Claw
         return if source.strip.empty?
 
         bind.eval(source)
-      rescue => e
+      rescue Exception => e # rubocop:disable Lint/RescueException — SyntaxError is not a StandardError
         $stderr.puts "Claw::Serializer restore error: #{e.message}" if $DEBUG
       end
     end

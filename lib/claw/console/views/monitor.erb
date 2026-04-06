@@ -1,0 +1,15 @@
+<h1>LLM Monitor</h1>
+<div class="monitor-controls">
+  <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll</label>
+  <select id="event-filter">
+    <option value="">All events</option>
+    <option value="llm_call">LLM calls</option>
+    <option value="tool_call">Tool calls</option>
+    <option value="snapshot">Snapshots</option>
+    <option value="trace">Traces</option>
+  </select>
+  <span class="muted" id="event-count">0 events</span>
+</div>
+<div class="event-stream" id="event-stream">
+  <p class="muted">Connecting to event stream...</p>
+</div>

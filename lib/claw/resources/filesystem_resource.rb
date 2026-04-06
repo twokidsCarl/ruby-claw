@@ -54,6 +54,26 @@ module Claw
         log.strip.empty? ? "(no commits)" : log.strip
       end
 
+      # Merge changes from another FilesystemResource (e.g., child worktree).
+      # Performs a git merge from the other's current HEAD.
+      def merge_from!(other)
+        other_path = other.respond_to?(:path) ? other.path : nil
+        raise "Cannot determine path for merge source" unless other_path
+
+        # Determine the branch name to merge
+        other_branch = if other.is_a?(Resources::WorktreeResource)
+          other.branch_name
+        else
+          other.instance_eval { git("rev-parse", "--abbrev-ref", "HEAD").strip }
+        end
+
+        remote_name = "child_#{object_id}"
+        git_try("remote", "add", remote_name, other_path)
+        git("fetch", remote_name)
+        git_try("merge", "#{remote_name}/#{other_branch}", "--no-edit", "-m", "merge from child")
+        git_try("remote", "remove", remote_name)
+      end
+
       private
 
       def git_initialized?

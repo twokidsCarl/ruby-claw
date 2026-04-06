@@ -14,12 +14,14 @@ gem install ruby-claw
 
 ## Features
 
-### Interactive Chat REPL
+### Interactive TUI
+Running `claw` launches a full-screen terminal UI (built on Charm Ruby's bubbletea) with 4 zones: top status bar, left chat panel, right status panel, and bottom command bar.
+
+`Claw.chat` still works for the legacy REPL mode:
 ```ruby
 require "claw"
 Claw.chat
 ```
-Or from command line: `claw`
 
 - Auto-detects Ruby code vs natural language
 - Streaming output with markdown rendering
@@ -105,6 +107,43 @@ claw> /rollback 2
 | `/history` | List all snapshots |
 | `/status` | Show current resource state |
 | `/evolve` | Run a self-evolution cycle |
+| `/role <name>` | Switch agent role/identity |
+| `/forge <method>` | Promote a method to a formal tool |
+
+### Plan Mode
+
+`/plan` toggles plan mode. When active, the LLM generates a step-by-step plan without executing any tools. The user reviews the proposed steps, then confirms execution -- which runs in a safe fork so the original state is preserved if anything goes wrong.
+
+### Roles
+
+Role files are Markdown documents stored in `.ruby-claw/roles/`. Each role defines an agent identity (system prompt, constraints, tool permissions).
+
+- `/role <name>` switches the active agent identity at runtime
+- `claw init` creates a default role
+
+### Benchmark
+
+`claw benchmark run` executes the benchmark suite -- 9 built-in tasks spanning the mana, claw, runtime, and evolution layers. Each task runs 3 times, and scoring covers:
+
+- **Correctness** -- did the agent produce the right result?
+- **Rounds efficiency** -- how many LLM round-trips were needed?
+- **Token efficiency** -- total token usage
+- **Tool path accuracy** -- did the agent call the expected tools in the expected order?
+
+`claw benchmark diff <a> <b>` compares two benchmark reports side by side. Auto-triggers an evolution cycle on score regression or 3 consecutive failures.
+
+### Multi-Agent
+
+`runtime.fork_async(prompt:, vars:, role:)` spawns a child agent that runs in an isolated thread with deep-copied variables and an optional git worktree for filesystem isolation.
+
+Child lifecycle methods:
+
+- `child.join` -- block until the child finishes
+- `child.cancel!` -- abort the child
+- `child.diff` -- inspect changes made by the child
+- `child.merge!` -- merge the child's results back into the parent
+
+All operations are thread-safe with Mutex protection.
 
 ### Execution Traces
 
@@ -124,6 +163,46 @@ Every LLM interaction is logged as a Markdown file in `.ruby-claw/traces/`:
 - **read_var**(name: "numbers") -> [1, 2, 3]
 ```
 
+### Tool System
+
+Claw has a three-layer tool architecture:
+
+1. **Core tools** (always loaded): `read_var`, `write_var`, `call_func`, `eval`, `remember`, `search_tools`, `load_tool`
+2. **Project tools** (on-demand): `.ruby-claw/tools/*.rb` — indexed at startup, loaded via `load_tool`
+3. **Hub tools** (remote): community tools from a ruby-claw-toolhub, downloaded on demand
+
+Create a project tool:
+```ruby
+# .ruby-claw/tools/format_report.rb
+class FormatReport
+  include Claw::Tool
+  tool_name   "format_report"
+  description "Format raw data into a readable report"
+  parameter   :data,  type: "Hash",   required: true,  desc: "Raw data"
+  parameter   :style, type: "String", required: false, desc: "brief or detailed"
+
+  def call(data:, style: "brief")
+    # ...
+  end
+end
+```
+
+The agent discovers tools via `search_tools` and loads them via `load_tool`. Use `/forge <method_name>` to promote an eval-defined method into a formal tool class.
+
+### Web Console
+
+`claw console` launches a local web UI at `http://127.0.0.1:4567` for observability and operations:
+
+- **Dashboard** — version, tool/memory/snapshot counts
+- **Prompt Inspector** — view and edit the assembled system prompt
+- **LLM Monitor** — real-time event stream via Server-Sent Events
+- **Trace Explorer** — browse execution traces
+- **Memory Manager** — add/remove long-term memories
+- **Tool Manager** — view core tools, load/unload project tools
+- **Snapshot Manager** — create snapshots, rollback state
+
+All data is served via a REST API (`/api/status`, `/api/traces`, `/api/memory`, etc.).
+
 ### Project Scaffolding
 
 Initialize a project with editable gem source for self-evolution:
@@ -138,6 +217,9 @@ Creates:
   gems/
     ruby-claw/    # Editable source
     ruby-mana/
+  tools/            # Project tool classes
+  roles/            # Agent role definitions
+  benchmarks/       # Benchmark reports
   system_prompt.md  # Customizable agent personality
   MEMORY.md
   .git/             # Filesystem snapshots
@@ -157,6 +239,23 @@ Flow: read traces → LLM diagnoses improvement → fork runtime → apply chang
 
 Evolution logs are written to `.ruby-claw/evolution/`.
 
+### CLI Subcommands
+
+| Command | Description |
+|---------|-------------|
+| `claw` | Launch the TUI (default) |
+| `claw init` | Scaffold a new project |
+| `claw status` | Show current resource state |
+| `claw history` | List all snapshots |
+| `claw rollback <id>` | Rollback to a snapshot |
+| `claw trace [id]` | View execution traces |
+| `claw evolve` | Run a self-evolution cycle |
+| `claw benchmark run` | Run the benchmark suite |
+| `claw benchmark diff <a> <b>` | Compare two benchmark reports |
+| `claw console` | Launch the web console UI |
+| `claw version` | Print version |
+| `claw help` | Show help |
+
 ## Configuration
 
 ```ruby
@@ -167,6 +266,9 @@ Claw.configure do |c|
   c.persist_session = true       # Save/restore session across restarts
   c.memory_top_k = 10           # Max memories to inject when searching
   c.on_compact = ->(summary) { puts summary }
+  c.tools_dir = nil              # Custom tools directory (default: .ruby-claw/tools)
+  c.hub_url = nil                # Remote tool hub URL
+  c.console_port = 4567          # Web console port
 end
 
 # Mana config (inherited)

@@ -33,6 +33,7 @@ RSpec.configure do |config|
     Thread.current[:claw_incognito] = nil
     Thread.current[:mana_context] = nil
     Thread.current[:mana_memory] = nil
+    Thread.current[:claw_role] = nil
     # Re-register claw's tools after reset (reset clears them)
     load File.expand_path("../../lib/claw.rb", __FILE__)
   end

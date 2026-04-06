@@ -40,6 +40,22 @@ module Claw
         lines.empty? ? "(no changes)" : lines.join("\n")
       end
 
+      # Merge new memories from another MemoryResource.
+      # Appends facts from other that don't already exist (by id) in this memory.
+      def merge_from!(other)
+        existing_ids = @memory.long_term.map { |m| m[:id] }.to_set
+        other_memory = other.instance_variable_get(:@memory)
+        other_memory.long_term.each do |m|
+          unless existing_ids.include?(m[:id])
+            @memory.long_term << MarshalMd.load(MarshalMd.dump(m))
+          end
+        end
+        # Sync to disk
+        store = @memory.send(:store)
+        ns = @memory.send(:namespace)
+        store.write(ns, @memory.long_term)
+      end
+
       # Render current memory state as Markdown.
       def to_md
         count = @memory.long_term.size
