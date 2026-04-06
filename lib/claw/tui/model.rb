@@ -129,6 +129,9 @@ module Claw
               when "backspace"
                 @input_text = @input_text[0..-2] if @input_text.length > 0
                 Bubbletea.none
+              when "space"
+                @input_text << " "
+                Bubbletea.none
               else
                 # Regular character input
                 @input_text << key if key.length == 1 && key.ord >= 32

@@ -172,6 +172,20 @@ RSpec.describe Claw::TUI::Model do
         expect(model.input_text).to eq("a")
       end
 
+      it "appends space for space key" do
+        result = model.update(make_key("space"))
+        expect_mvu_tuple(result)
+        expect(model.input_text).to eq(" ")
+      end
+
+      it "builds multi-word input with spaces" do
+        model.update(make_key("h"))
+        model.update(make_key("i"))
+        model.update(make_key("space"))
+        model.update(make_key("there"))  # won't append (length > 1)
+        expect(model.input_text).to eq("hi ")
+      end
+
       it "returns [model, command] tuple for backspace" do
         model.instance_variable_set(:@input_text, "abc")
         result = model.update(make_key("backspace"))
