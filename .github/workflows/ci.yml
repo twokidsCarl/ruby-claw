@@ -18,6 +18,10 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: false
+      - name: Configure git
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@test.com"
       - name: Install dependencies
         run: bundle install --jobs 4
       - name: Run tests
