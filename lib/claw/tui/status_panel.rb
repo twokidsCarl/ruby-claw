@@ -13,7 +13,9 @@ module Claw
         sections << render_tokens(model, width - 4)
         sections << render_status(model, width - 4)
 
-        content = sections.join("\n")
+        # Truncate content to fit within available height
+        all_lines = sections.join("\n").split("\n")
+        content = all_lines.first(height).join("\n")
         Styles::PANEL_BORDER.width(width).height(height).render(content)
       end
 
@@ -36,6 +38,24 @@ module Claw
           lines << truncate(line, width)
         end
         lines << "  (empty)" if binding_res.tracked.empty?
+
+        # Show user-defined methods (only those added during session)
+        begin
+          b = binding_res.instance_variable_get(:@binding)
+          receiver = b.eval("self")
+          # Filter to methods defined via def in REPL (exclude Object/Kernel defaults)
+          base_methods = Object.new.methods(false)
+          user_methods = (receiver.methods(false) - base_methods).sort
+          unless user_methods.empty?
+            lines << Styles::SECTION_HEADER.render("Methods")
+            user_methods.each do |m|
+              lines << truncate("  def #{m}", width)
+            end
+          end
+        rescue
+          # ignore if binding is not accessible
+        end
+
         lines.join("\n")
       end
 
@@ -109,6 +129,10 @@ module Claw
 
       def self.summary_value(v)
         case v
+        when NilClass then "nil"
+        when TrueClass, FalseClass then v.to_s
+        when Numeric then v.to_s
+        when Symbol then v.inspect
         when Array then v.size.to_s
         when Hash then "#{v.size} keys"
         when String then v.length > 20 ? "#{v.length} chars" : v.inspect

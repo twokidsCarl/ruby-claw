@@ -1,0 +1,76 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# TUI Snapshot — capture rendered TUI output without a real terminal.
+#
+# Usage:
+#   exe/tui-snapshot [width] [height] [commands...]
+#
+# Examples:
+#   exe/tui-snapshot                      # default 120x30, no input
+#   exe/tui-snapshot 100 25               # custom size
+#   exe/tui-snapshot 120 30 '!a + b'      # run a Ruby expression
+#   exe/tui-snapshot 120 30 '!a + b' '!{x: 1, y: [2,3]}' '/status'
+#
+# Output:
+#   - Prints plain text TUI to stdout
+#   - Writes plain text to .ruby-claw/snapshot.txt
+#   - Writes ANSI version to .ruby-claw/snapshot-ansi.txt
+
+require "bundler/setup"
+
+# Disable session persistence for snapshot mode
+ENV["CLAW_NO_SESSION"] = "1"
+
+require "claw"
+
+# Override to skip session loading
+Claw.config.persist_session = false if Claw.config.respond_to?(:persist_session=)
+
+WIDTH  = (ARGV.shift || 120).to_i
+HEIGHT = (ARGV.shift || 30).to_i
+COMMANDS = ARGV.map { |a| a.gsub('\!', '!') }  # remaining args are commands; fix zsh \! escaping
+
+# --- Test binding with sample data (isolated via method to avoid script vars leaking) ---
+def self.make_test_binding
+  a = 1
+  b = 2
+  title = "hello world — a sample string for testing"
+  items = [1, 2, 3, 4, 5]
+  config = { name: "claw", version: Claw::VERSION, debug: false }
+  binding
+end
+
+test_binding = make_test_binding
+
+# --- Helper: simulate typing a command and pressing enter ---
+def type_and_submit(model, text)
+  # Set the textarea value directly, then simulate enter to submit
+  model.textarea.value = text
+  enter = Bubbletea::KeyMessage.new(key_type: 0, runes: [], name: "enter")
+  model.update(enter)
+end
+
+# --- Build model ---
+model = Claw::TUI::Model.new(test_binding)
+model.init
+
+# --- Simulate commands ---
+COMMANDS.each do |cmd|
+  type_and_submit(model, cmd)
+end
+
+
+# --- Render at specified size ---
+output = Claw::TUI::Layout.render(model, WIDTH, HEIGHT)
+
+# --- Write snapshots ---
+dir = File.join(Dir.pwd, ".ruby-claw")
+Dir.mkdir(dir) unless Dir.exist?(dir)
+
+plain = output.gsub(/\e\[\d*(?:;\d+)*[A-Za-z]/, "").gsub(/\e\].*?\e\\/, "")
+File.write(File.join(dir, "snapshot.txt"), plain)
+File.write(File.join(dir, "snapshot-ansi.txt"), output)
+
+# --- Print plain text to stdout (readable by Claude) ---
+puts plain

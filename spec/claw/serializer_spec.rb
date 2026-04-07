@@ -55,6 +55,23 @@ RSpec.describe Claw::Serializer do
     end
   end
 
+  describe ".restore return value" do
+    it "returns an empty array when no files exist" do
+      bind = make_binding_with(x: 99)
+      result = described_class.restore(bind, dir)
+      expect(result).to eq([])
+    end
+
+    it "returns an array after restoring values" do
+      bind = make_binding_with(x: 42)
+      described_class.save(bind, dir)
+
+      target = make_binding_with(x: nil)
+      result = described_class.restore(target, dir)
+      expect(result).to be_a(Array)
+    end
+  end
+
   describe "restore_values edge cases" do
     it "does nothing when values file does not exist" do
       bind = make_binding_with(x: 99)

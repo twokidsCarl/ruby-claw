@@ -123,3 +123,41 @@ RSpec.describe "Chat slash commands" do
     end
   end
 end
+
+RSpec.describe "Chat.start ensure save" do
+  let(:tmpdir) { Dir.mktmpdir("claw-chat-test-") }
+  let(:claw_dir) { File.join(tmpdir, ".ruby-claw") }
+
+  before do
+    FileUtils.mkdir_p(claw_dir)
+    Claw.config.persist_session = true
+    # Stub Dir.pwd to use our tmpdir for .ruby-claw/
+    allow(Dir).to receive(:pwd).and_return(tmpdir)
+    # Stub out init helpers that require real terminal / filesystem
+    allow(Claw::Chat).to receive(:load_history)
+    allow(Claw::Chat).to receive(:save_history)
+    allow(Claw::Chat).to receive(:load_compiled_methods)
+    allow(Claw::Chat).to receive(:restore_runtime)
+    allow(Claw).to receive(:memory).and_return(nil)
+  end
+
+  after { FileUtils.rm_rf(tmpdir) }
+
+  it "saves definitions even when the loop crashes" do
+    call_count = 0
+    allow(Claw::Chat).to receive(:read_input) do
+      call_count += 1
+      case call_count
+      when 1 then "def test_persist; 999; end"
+      else raise RuntimeError, "simulated crash"
+      end
+    end
+
+    b = binding
+    expect { Claw::Chat.start(b) }.to raise_error(RuntimeError, "simulated crash")
+
+    defs_path = File.join(claw_dir, "definitions.rb")
+    expect(File.exist?(defs_path)).to be true
+    expect(File.read(defs_path)).to include("def test_persist")
+  end
+end

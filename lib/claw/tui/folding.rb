@@ -28,20 +28,37 @@ module Claw
       #
       # @param calls [Array<Hash>] tool call messages ({ role: :tool_call, ... })
       # @return [Array<Hash>] folded messages (may be shorter)
-      def self.fold_tool_calls(calls)
-        return calls if calls.size <= 2
+      def self.fold_tool_calls(messages)
+        return messages if messages.size <= 2
 
-        groups = calls.chunk { |c| c[:detail]&.split("(")&.first || c[:detail] }
-        groups.flat_map do |tool_name, group|
-          if group.size > 2
-            targets = group.map { |c| c[:detail].to_s.split("(").last&.tr(")", "") || "" }
-            summary = "#{group.size}x #{tool_name} (#{targets.first(3).join(', ')}#{targets.size > 3 ? ', ...' : ''})"
-            [{ role: :tool_call, icon: "⚡", detail: summary,
-               folded: true, children: group }]
+        # Only fold consecutive :tool_call messages; pass everything else through
+        result = []
+        tool_group = []
+
+        flush = -> {
+          if tool_group.size > 2
+            tool_name = tool_group.first[:detail]&.split("(")&.first || "tool"
+            targets = tool_group.map { |c| c[:detail].to_s.split("(").last&.tr(")", "") || "" }
+            summary = "#{tool_group.size}x #{tool_name} (#{targets.first(3).join(', ')}#{targets.size > 3 ? ', ...' : ''})"
+            result << { role: :tool_call, icon: "⚡", detail: summary,
+                        folded: true, children: tool_group }
           else
-            group
+            result.concat(tool_group)
+          end
+          tool_group.clear
+        }
+
+        messages.each do |msg|
+          if msg[:role] == :tool_call
+            tool_group << msg
+          else
+            flush.call unless tool_group.empty?
+            result << msg
           end
         end
+        flush.call unless tool_group.empty?
+
+        result
       end
 
       # Render a diff hash with colors (green for additions, red for removals).

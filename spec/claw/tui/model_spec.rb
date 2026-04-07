@@ -14,6 +14,16 @@ RSpec.describe Claw::TUI::Model do
     expect(result[0]).to respond_to(:view), "first element must be a model (respond to #view)"
   end
 
+  def make_key(char)
+    runes = char.bytes.size == 1 ? [char.ord] : []
+    Bubbletea::KeyMessage.new(key_type: 0, runes: runes, name: char)
+  end
+
+  def submit(model, text)
+    model.textarea.value = text
+    model.update(make_key("enter"))
+  end
+
   describe "#initialize" do
     it "starts in normal mode" do
       expect(model.mode).to eq(:normal)
@@ -21,6 +31,10 @@ RSpec.describe Claw::TUI::Model do
 
     it "initializes runtime" do
       expect(model.runtime).to be_a(Claw::Runtime)
+    end
+
+    it "has a textarea" do
+      expect(model.textarea).to be_a(Bubbles::TextArea)
     end
 
     it "starts with empty chat history except system message after init" do
@@ -68,7 +82,6 @@ RSpec.describe Claw::TUI::Model do
 
       it "buffers streaming text" do
         model.update(Claw::TUI::AgentTextMsg.new(text: "hello"))
-        # Text is buffered, not yet in chat_history
         expect(model.chat_history.none? { |m| m[:role] == :agent }).to be true
       end
     end
@@ -157,47 +170,21 @@ RSpec.describe Claw::TUI::Model do
     end
 
     context "with KeyMessage" do
-      def make_key(char)
-        runes = char.bytes.size == 1 ? [char.ord] : []
-        Bubbletea::KeyMessage.new(key_type: 0, runes: runes, name: char)
-      end
-
       it "returns [model, command] tuple for regular key" do
         result = model.update(make_key("a"))
         expect_mvu_tuple(result)
       end
 
-      it "appends character to input_text" do
+      it "appends character to textarea" do
         model.update(make_key("a"))
-        expect(model.input_text).to eq("a")
+        expect(model.textarea.value).to eq("a")
       end
 
-      it "appends space for space key" do
-        result = model.update(make_key("space"))
-        expect_mvu_tuple(result)
-        expect(model.input_text).to eq(" ")
-      end
-
-      it "builds multi-word input with spaces" do
-        model.update(make_key("h"))
-        model.update(make_key("i"))
-        model.update(make_key("space"))
-        model.update(make_key("there"))  # won't append (length > 1)
-        expect(model.input_text).to eq("hi ")
-      end
-
-      it "returns [model, command] tuple for backspace" do
-        model.instance_variable_set(:@input_text, "abc")
-        result = model.update(make_key("backspace"))
-        expect_mvu_tuple(result)
-        expect(model.input_text).to eq("ab")
-      end
-
-      it "returns [model, QuitCommand] for ctrl+c" do
+      it "resets textarea on ctrl+c when idle" do
+        model.textarea.value = "some text"
         result = model.update(make_key("ctrl+c"))
         expect_mvu_tuple(result)
-        _m, cmd = result
-        expect(cmd).to be_a(Bubbletea::QuitCommand)
+        expect(model.textarea.value).to eq("")
       end
 
       it "returns [model, QuitCommand] for ctrl+d" do
@@ -206,6 +193,51 @@ RSpec.describe Claw::TUI::Model do
         _m, cmd = result
         expect(cmd).to be_a(Bubbletea::QuitCommand)
       end
+    end
+  end
+
+  describe "input submission" do
+    before { model.init }
+
+    it "does not quit on 'q'" do
+      result = submit(model, "q")
+      expect_mvu_tuple(result)
+      _m, cmd = result
+      expect(cmd).not_to be_a(Bubbletea::QuitCommand)
+    end
+
+    it "quits on 'exit'" do
+      result = submit(model, "exit")
+      _m, cmd = result
+      expect(cmd).to be_a(Bubbletea::QuitCommand)
+    end
+
+    it "quits on 'quit'" do
+      result = submit(model, "quit")
+      _m, cmd = result
+      expect(cmd).to be_a(Bubbletea::QuitCommand)
+    end
+
+    it "evaluates ruby expression directly" do
+      submit(model, "42 + 1")
+      ruby_msgs = model.chat_history.select { |m| m[:role] == :ruby }
+      expect(ruby_msgs.size).to eq(1)
+      expect(ruby_msgs.first[:content]).to include("43")
+    end
+
+    it "enters multiline mode for incomplete ruby" do
+      model.textarea.value = "def foo"
+      model.update(make_key("enter"))
+      # Textarea should still have content (newline added, not submitted)
+      expect(model.textarea.value).to include("def foo")
+      expect(model.textarea.line_count).to be >= 2
+    end
+
+    it "submits complete multiline ruby" do
+      model.textarea.value = "def foo\n  \"hi\"\nend"
+      model.update(make_key("enter"))
+      ruby_msgs = model.chat_history.select { |m| m[:role] == :ruby }
+      expect(ruby_msgs.size).to eq(1)
     end
   end
 

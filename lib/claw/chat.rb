@@ -33,29 +33,32 @@ module Claw
       puts "#{DIM}Claw agent · type 'exit' to quit#{RESET}"
       puts
 
-      loop do
-        input = read_input
-        break if input.nil?
-        next if input.strip.empty?
-        break if input.strip.match?(EXIT_COMMANDS)
+      begin
+        loop do
+          input = read_input
+          break if input.nil?
+          next if input.strip.empty?
+          break if input.strip.match?(EXIT_COMMANDS)
 
-        if input.start_with?("/")
-          handle_slash_command(input.strip)
-        elsif input.start_with?("!")
-          eval_ruby(caller_binding, input[1..].strip)
-        elsif ruby_syntax?(input)
-          eval_ruby(caller_binding, input) { run_claw(caller_binding, input) }
-        else
-          run_claw(caller_binding, input)
+          if input.start_with?("/")
+            handle_slash_command(input.strip)
+          elsif input.start_with?("!")
+            eval_ruby(caller_binding, input[1..].strip)
+          elsif ruby_syntax?(input)
+            eval_ruby(caller_binding, input) { run_claw(caller_binding, input) }
+          else
+            run_claw(caller_binding, input)
+          end
+          puts
         end
-        puts
-      end
 
-      # Save state on exit
-      save_runtime(caller_binding)
-      Claw.memory&.save_session
-      save_history
-      puts "#{DIM}bye!#{RESET}"
+        puts "#{DIM}bye!#{RESET}"
+      ensure
+        # Save state even when an exception crashes the loop
+        save_runtime(caller_binding)
+        Claw.memory&.save_session
+        save_history
+      end
     end
 
     def self.load_history

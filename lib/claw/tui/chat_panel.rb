@@ -8,8 +8,19 @@ module Claw
     # Uses Bubbles::Viewport for scrollable content and Glamour for markdown rendering.
     module ChatPanel
       def self.render(model, width, height)
-        # Reserve 3 lines for input box
-        chat_height = height - 3
+        # Configure textarea width and render it
+        ta = model.textarea
+        ta.width = width - 4
+        # Dynamic height: expand to actual line count, cap at 5
+        line_count = [ta.line_count, 1].max
+        ta.height = [line_count, 5].min
+        input_view = ta.view
+        _, input_h = Lipgloss.size(input_view)
+        input_h = [input_h, 5].min
+
+        # Chat viewport fills remaining space
+        chat_height = height - input_h - 1
+        chat_height = 3 if chat_height < 3
 
         # Render chat messages
         content = render_messages(model.chat_history, width - 4)
@@ -21,12 +32,9 @@ module Claw
         viewport.content = content
         viewport.goto_bottom unless model.scrolled_up?
 
-        # Input box
-        input_line = render_input(model, width - 4)
-
         # Compose with border
         chat_view = viewport.view
-        panel = "#{chat_view}\n#{input_line}"
+        panel = "#{chat_view}\n#{input_view}"
 
         Styles::PANEL_BORDER.width(width).height(height).render(panel)
       end
@@ -39,7 +47,7 @@ module Claw
         messages.each do |msg|
           case msg[:role]
           when :user
-            lines << Styles::USER_STYLE.render("you> #{msg[:content]}")
+            lines << Styles::USER_STYLE.render(">> #{msg[:content]}")
           when :agent
             rendered = begin
               Glamour.render(msg[:content].to_s)
@@ -64,18 +72,11 @@ module Claw
         lines.join("\n")
       end
 
-      def self.render_input(model, width)
-        prompt = model.mode == :plan ? "plan> " : "claw> "
-        cursor = model.input_focused? ? "█" : ""
-        text = "#{prompt}#{model.input_text}#{cursor}"
-        Lipgloss::Style.new.foreground(Styles::CYAN).width(width).render(text)
-      end
-
       def self.truncate(str, max)
         str.length > max ? "#{str[0, max - 3]}..." : str
       end
 
-      private_class_method :render_messages, :render_input, :truncate
+      private_class_method :render_messages, :truncate
     end
   end
 end
