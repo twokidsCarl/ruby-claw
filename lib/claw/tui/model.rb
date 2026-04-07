@@ -9,16 +9,13 @@ module Claw
     # MVU Model — central state for the TUI application.
     # Implements Bubbletea's init/update/view protocol.
     class Model
-      attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor
-      attr_accessor :input_text
+      attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea
 
       def initialize(caller_binding)
         @caller_binding = caller_binding
         @runtime = init_runtime(caller_binding)
         @chat_history = []
         @mode = :normal  # :normal | :plan
-        @input_text = +""
-        @input_focused = true
         @scrolled_up = false
         @text_buffer = +""  # accumulates streaming text
 
@@ -26,6 +23,12 @@ module Claw
         @chat_viewport = Bubbles::Viewport.new(width: 80, height: 20)
         @spinner = Bubbles::Spinner.new
         @spinner.style = Styles::SPINNER_STYLE
+        @textarea = Bubbles::TextArea.new(width: 70, height: 1)
+        @textarea.placeholder = "Ruby expression, or /help"
+        @textarea.placeholder_style = Lipgloss::Style.new.foreground(Styles::DIM_GRAY)
+        @textarea.prompt = prompt_text
+        @textarea.prompt_style = Lipgloss::Style.new.foreground(Styles::CYAN)
+        @textarea.focus
 
         # Agent executor
         @executor = AgentExecutor.new(@runtime)
@@ -39,7 +42,7 @@ module Claw
       end
 
       def init
-        @chat_history << { role: :system, content: "Claw agent ready · type 'exit' to quit" }
+        @chat_history << { role: :system, content: "Claw agent ready" }
         [self, Bubbletea.batch(@spinner.tick, Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) })]
       end
 
@@ -77,6 +80,8 @@ module Claw
                 Bubbletea.none
               when StateChangeMsg
                 Bubbletea.none
+              when Bubbletea::WindowSizeMessage
+                Bubbletea.none
               else
                 Bubbletea.none
               end
@@ -103,7 +108,6 @@ module Claw
         "#{format_tokens(used)}/#{format_tokens(limit)}"
       end
 
-      def input_focused? = @input_focused
       def scrolled_up? = @scrolled_up
       def spinner_view = @spinner.view
 
@@ -112,47 +116,59 @@ module Claw
       def handle_key(msg)
         key = msg.to_s
 
-        cmd = case key
-              when "ctrl+c", "ctrl+d"
-                save_state
-                return [self, Bubbletea.quit]
-              when "enter"
-                return submit_input
-              when "pgup"
-                @chat_viewport.page_up
-                @scrolled_up = true
-                Bubbletea.none
-              when "pgdown"
-                @chat_viewport.page_down
-                @scrolled_up = @chat_viewport.at_bottom? ? false : true
-                Bubbletea.none
-              when "backspace"
-                @input_text = @input_text[0..-2] if @input_text.length > 0
-                Bubbletea.none
-              when "space"
-                @input_text << " "
-                Bubbletea.none
-              else
-                # Regular character input
-                @input_text << key if key.length == 1 && key.ord >= 32
-                Bubbletea.none
-              end
-        [self, cmd]
+        case key
+        when "ctrl+d"
+          save_state
+          return [self, Bubbletea.quit]
+        when "ctrl+c"
+          if @executor.running?
+            @executor.cancel!
+            @chat_history << { role: :system, content: "interrupted" }
+          else
+            @textarea.reset
+          end
+          return [self, Bubbletea.none]
+        when "pgup"
+          @chat_viewport.page_up
+          @scrolled_up = true
+          return [self, Bubbletea.none]
+        when "pgdown"
+          @chat_viewport.page_down
+          @scrolled_up = @chat_viewport.at_bottom? ? false : true
+          return [self, Bubbletea.none]
+        when "enter"
+          text = @textarea.value.strip
+          if text.empty?
+            return [self, Bubbletea.none]
+          elsif incomplete_ruby_input?(text)
+            # Incomplete Ruby — let textarea insert newline for continuation
+            @textarea, ta_cmd = @textarea.update(msg)
+            return [self, ta_cmd]
+          else
+            # Complete input — submit
+            return submit_textarea
+          end
+        end
+
+        # All other keys → forward to textarea
+        @textarea, ta_cmd = @textarea.update(msg)
+        [self, ta_cmd]
       end
 
-      def submit_input
-        text = @input_text.strip
-        @input_text = +""
+      def submit_textarea
+        text = @textarea.value.strip
+        @textarea.reset
+        @textarea.prompt = prompt_text
         return [self, Bubbletea.none] if text.empty?
 
-        # Busy guard — prevent concurrent LLM executions
-        if @executor.running? && !text.start_with?("/") && !text.start_with?("!") && !text.match?(/\A(exit|quit|bye|q)\z/i)
+        # Busy guard — prevent concurrent executions
+        if @executor.running? && !text.start_with?("/") && !text.match?(/\A(exit|quit|bye)\z/i)
           @chat_history << { role: :system, content: "Agent is busy — please wait for the current execution to finish." }
           return [self, Bubbletea.none]
         end
 
         # Exit
-        if text.match?(/\A(exit|quit|bye|q)\z/i)
+        if text.match?(/\A(exit|quit|bye)\z/i)
           save_state
           return [self, Bubbletea.quit]
         end
@@ -162,18 +178,61 @@ module Claw
 
         if text.start_with?("/")
           handle_slash(text)
-        elsif text.start_with?("!")
-          handle_ruby(text[1..].strip)
-        elsif ruby_syntax?(text)
-          handle_ruby_or_llm(text)
         else
-          handle_llm(text)
+          # Ruby-first REPL: all non-slash input is evaluated as Ruby
+          handle_ruby(text)
         end
       end
 
       def handle_slash(text)
         cmd, *args = text.sub(/\A\//, "").split(" ", 2)
         arg = args.first
+
+        if cmd == "help"
+          help = [
+            "/help         — show this help",
+            "/ask <text>   — ask AI",
+            "/new          — new session",
+            "/status       — runtime status",
+            "/snapshot [l] — create snapshot",
+            "/rollback <id>— restore snapshot",
+            "/diff [a] [b] — diff snapshots",
+            "/history      — list snapshots",
+            "/plan         — toggle plan mode",
+            "/ls           — list bindings",
+            "/cd <obj>     — navigate into object",
+            "/source <m>   — show method source",
+            "/doc <m>      — show method docs",
+            "/find <pat>   — search methods",
+            "/whereami     — current location",
+            "/role [name]  — switch role",
+            "/evolve       — run evolution",
+            "/forge <m>    — promote method",
+            "",
+            "All other input is evaluated as Ruby.",
+            "exit/quit     — quit (or ctrl+d)",
+          ]
+          @chat_history << { role: :system, content: help.join("\n") }
+          return [self, Bubbletea.none]
+        end
+
+        if cmd == "ask"
+          if arg && !arg.strip.empty?
+            handle_llm(arg.strip)
+          else
+            @chat_history << { role: :error, content: "Usage: /ask <question>" }
+          end
+          return [self, Bubbletea.none]
+        end
+
+        if cmd == "new"
+          @chat_history.clear
+          @chat_history << { role: :system, content: "New session." }
+          Mana::Context.current.reset! if Mana::Context.current.respond_to?(:reset!)
+          @chat_viewport.content = ""
+          @scrolled_up = false
+          return [self, Bubbletea.none]
+        end
 
         if cmd == "plan"
           @mode = @mode == :plan ? :normal : :plan
@@ -235,7 +294,7 @@ module Claw
       def handle_ruby(code)
         eval_result = @executor.eval_ruby(code, @caller_binding)
         if eval_result[:success]
-          @chat_history << { role: :ruby, content: eval_result[:result].inspect }
+          @chat_history << { role: :ruby, content: pretty_inspect(eval_result[:result]) }
           # Track method definitions for session persistence
           if eval_result[:result].is_a?(Symbol) && code.strip.match?(/\Adef\s/)
             track_definition(@caller_binding, code, eval_result[:result])
@@ -247,19 +306,6 @@ module Claw
         [self, Bubbletea.none]
       end
 
-      def handle_ruby_or_llm(text)
-        eval_result = @executor.eval_ruby(text, @caller_binding)
-        if eval_result[:success]
-          @chat_history << { role: :ruby, content: eval_result[:result].inspect }
-          @runtime&.resources&.dig("binding")&.scan_binding
-          [self, Bubbletea.none]
-        elsif eval_result[:error].is_a?(NameError) && (text.include?(" ") || text.match?(/[^\x00-\x7F]/))
-          handle_llm(text)
-        else
-          @chat_history << { role: :error, content: "#{eval_result[:error].class}: #{eval_result[:error].message}" }
-          [self, Bubbletea.none]
-        end
-      end
 
       def handle_llm(text)
         # Extract @file references and inject file context
@@ -352,12 +398,15 @@ module Claw
         end
       end
 
-      def ruby_syntax?(input)
-        RubyVM::InstructionSequence.compile(input)
-        true
-      rescue SyntaxError
-        false
+      def incomplete_ruby_input?(text)
+        return false if text.start_with?("/")  # slash commands are never multiline
+        InputHandler.incomplete?(text)
       end
+
+      def prompt_text
+        @mode == :plan ? "plan> " : ">> "
+      end
+
 
       def write_trace(trace_data)
         return unless trace_data
@@ -381,6 +430,13 @@ module Claw
           receiver.instance_variable_get(:@__claw_definitions__) : {}
         defs[method_name.to_s] = code
         receiver.instance_variable_set(:@__claw_definitions__, defs)
+      end
+
+      def pretty_inspect(obj)
+        require "pp"
+        PP.pp(obj, +"", 60).chomp
+      rescue
+        obj.inspect
       end
 
       def format_tokens(n)

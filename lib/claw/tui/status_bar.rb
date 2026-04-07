@@ -2,14 +2,34 @@
 
 module Claw
   module TUI
-    # Top status bar: version | model | snapshot id | token usage | mode
+    # Top status bar: version | model | snapshot id | token usage | state
+    # Dynamically drops lower-priority items when viewport is too narrow.
     module StatusBar
       def self.render(model, width)
+        right = build_right(model)
+
+        # Left items in priority order (last dropped first)
+        left_items = [
+          "claw v#{Claw::VERSION} b#{Claw::BUILD.split('-').last}",
+          model_short_name,
+          "snap:#{model.last_snapshot_id}",
+          model.token_display
+        ]
+
+        # Drop items from the end until it fits in one line
+        text = nil
+        loop do
+          left_text = left_items.join(" | ")
+          text = compose(left_text, right, width)
+          break if visible_width(text) <= width || left_items.size <= 1
+          left_items.pop
+        end
+
+        Styles::STATUS_BAR.width(width).render(text)
+      end
+
+      def self.build_right(model)
         parts = []
-        parts << "ruby-claw v#{Claw::VERSION}"
-        parts << Mana.config.model
-        parts << "snap: ##{model.last_snapshot_id}"
-        parts << "#{model.token_display}"
         parts << "mode: #{model.mode}" if model.mode != :normal
 
         state = model.runtime&.state
@@ -18,13 +38,29 @@ module Claw
           parts << "#{model.spinner_view} thinking..."
         when :executing_tool
           step = model.runtime&.current_step
-          label = step ? "#{model.spinner_view} #{step.tool_name}" : "#{model.spinner_view} executing..."
-          parts << label
+          parts << (step ? "#{model.spinner_view} #{step.tool_name}" : "#{model.spinner_view} exec...")
         end
 
-        text = parts.join(" | ")
-        Styles::STATUS_BAR.width(width).render(text)
+        parts.join(" | ")
       end
+
+      def self.compose(left, right, width)
+        return left if right.empty?
+        gap = width - visible_width(left) - visible_width(right) - 2
+        gap > 0 ? "#{left}#{" " * gap}#{right}" : "#{left} #{right}"
+      end
+
+      def self.visible_width(str)
+        # Strip ANSI escape sequences for width calculation
+        str.gsub(/\e\[[0-9;]*m/, "").size
+      end
+
+      def self.model_short_name
+        name = Mana.config.model.to_s
+        name.sub("claude-", "").sub("sonnet-", "s").sub("opus-", "o").sub("haiku-", "h")
+      end
+
+      private_class_method :build_right, :compose, :visible_width, :model_short_name
     end
   end
 end

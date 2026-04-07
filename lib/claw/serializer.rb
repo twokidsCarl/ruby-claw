@@ -28,6 +28,7 @@ module Claw
       def restore(bind, dir)
         restore_values(bind, dir)
         restore_definitions(bind, dir)
+        []
       end
 
       private

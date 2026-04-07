@@ -16,18 +16,18 @@ module Claw
       BORDER     = "#444444"
       BG_DARK    = "#1A1A2E"
 
-      # Status bar (top)
+      # Status bar (top) — reversed colors for visibility on any terminal bg
       STATUS_BAR = Lipgloss::Style.new
-        .foreground(CYAN)
-        .background("#1A1A2E")
+        .foreground("#000000")
+        .background(CYAN)
         .bold(true)
         .padding(0, 1)
 
       # Chat panel styles
       USER_STYLE = Lipgloss::Style.new.foreground(CYAN).bold(true)
       AGENT_STYLE = Lipgloss::Style.new.foreground(YELLOW)
-      TOOL_STYLE = Lipgloss::Style.new.foreground(DIM_GRAY).faint(true)
-      RESULT_STYLE = Lipgloss::Style.new.foreground(GREEN).faint(true)
+      TOOL_STYLE = Lipgloss::Style.new.foreground("#888888")
+      RESULT_STYLE = Lipgloss::Style.new.foreground(GREEN)
       ERROR_STYLE = Lipgloss::Style.new.foreground(RED)
       RUBY_STYLE = Lipgloss::Style.new.foreground(MAGENTA)
 
