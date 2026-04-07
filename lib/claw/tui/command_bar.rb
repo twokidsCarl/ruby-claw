@@ -8,7 +8,7 @@ module Claw
 
       def self.render(model, width)
         left = HINTS.join("  ")
-        right = "ctrl+c quit"
+        right = "ctrl+c interrupt  ctrl+d quit"
         left_w, _ = Lipgloss.size(left)
         right_w, _ = Lipgloss.size(right)
         spacing = width - left_w - right_w - 2

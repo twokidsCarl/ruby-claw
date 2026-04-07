@@ -113,9 +113,15 @@ module Claw
         key = msg.to_s
 
         cmd = case key
-              when "ctrl+c", "ctrl+d"
+              when "ctrl+d"
                 save_state
                 return [self, Bubbletea.quit]
+              when "ctrl+c"
+                if @executor.running?
+                  @executor.cancel!
+                  @chat_history << { role: :system, content: "Interrupted." }
+                end
+                return [self, Bubbletea.none]
               when "enter"
                 return submit_input
               when "pgup"

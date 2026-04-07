@@ -14,6 +14,16 @@ module Claw
       # Is an LLM execution currently in progress?
       def running? = @running
 
+      # Cancel a running execution by raising Interrupt on the execution thread.
+      def cancel!
+        @mutex.synchronize do
+          return unless @running
+          @thread&.raise(Interrupt)
+          @running = false
+        end
+        @runtime&.transition!(:idle)
+      end
+
       # Execute an LLM prompt in a background thread.
       # Yields MVU message objects as events occur.
       # Returns nil if already running.
@@ -34,7 +44,7 @@ module Claw
         parent_role = Thread.current[:claw_role]
         parent_memory = Thread.current[:claw_memory]
 
-        Thread.new do
+        @thread = Thread.new do
           # Propagate thread-local state to agent thread
           Thread.current[:mana_context] = parent_context
           Thread.current[:claw_role] = parent_role
