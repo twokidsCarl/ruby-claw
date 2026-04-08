@@ -21,7 +21,12 @@ module Claw
         @text_buffer = +""  # accumulates streaming text
         @input_history = []
         @history_index = nil
-        @baseline_methods = caller_binding.eval("methods").dup
+        @saved_input = +""
+        @baseline_methods = begin
+          caller_binding.eval("methods").dup
+        rescue
+          []
+        end
 
         # Bubbles components
         @chat_viewport = Bubbles::Viewport.new(width: 80, height: 20)
@@ -284,7 +289,7 @@ module Claw
           result = ObjectExplorer.source(arg.to_s, @caller_binding)
           if result[:type] == :data
             @chat_history << { role: :system, content: "#{result[:data][:file]}:#{result[:data][:line]}\n#{result[:data][:source]}" }
-          elsif result[:type] == :error && result[:message]&.include?("not found")
+          elsif result[:type] == :error
             # Try to find REPL-defined source from tracked definitions
             receiver = @caller_binding.eval("self")
             defs = receiver.instance_variable_defined?(:@__claw_definitions__) ?
@@ -345,15 +350,15 @@ module Claw
           if (err.is_a?(NameError) || err.is_a?(NoMethodError)) &&
              (text.include?(" ") || text.match?(/[^\x00-\x7F]/))
             # Multi-word or non-ASCII that failed as Ruby → fallback to AI
-            handle_llm(text)
+            return handle_llm(text)
           else
             @chat_history << { role: :error, content: "#{err.class}: #{err.message}" }
             @runtime&.resources&.dig("binding")&.scan_binding
-            [self, Bubbletea.none]
+            return [self, Bubbletea.none]
           end
         else
           # Not valid Ruby syntax → send to AI directly
-          handle_llm(text)
+          return handle_llm(text)
         end
       end
 
@@ -423,6 +428,9 @@ module Claw
           display += "  ..." if candidates.size > 20
           @chat_history << { role: :system, content: display }
         end
+      rescue => e
+        # Tab completion should never crash the TUI
+        nil
       end
 
 

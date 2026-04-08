@@ -92,10 +92,13 @@ module Claw
       # @param code [String] Ruby code to eval
       # @param binding [Binding] caller's binding
       # @return [Hash] { success: bool, result: Any, error: Exception? }
+      # Evaluate Ruby code in the given binding, catching all eval errors.
+      # Note: SyntaxError/ScriptError inherit from Exception (not StandardError),
+      # and SystemExit can be triggered by user code calling `exit`.
       def eval_ruby(code, binding)
         result = binding.eval(code)
         { success: true, result: result }
-      rescue StandardError, SyntaxError, ScriptError => e
+      rescue StandardError, ScriptError, SystemExit => e
         { success: false, error: e }
       end
     end
