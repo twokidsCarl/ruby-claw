@@ -279,11 +279,35 @@ RSpec.describe Claw::TUI::Model do
     end
 
     it "sends non-Ruby syntax to AI (e.g. Chinese text)" do
-      # "你好" is not valid Ruby syntax, so it should be routed to AI
-      # We can't fully test AI execution, but verify it doesn't crash and doesn't produce :ruby msg
       submit(model, "你好世界")
       ruby_msgs = model.chat_history.select { |m| m[:role] == :ruby }
       expect(ruby_msgs).to be_empty
+    end
+
+    it "shows error for single-word NameError (no AI fallback)" do
+      submit(model, "undefined_xyz_var")
+      errors = model.chat_history.select { |m| m[:role] == :error }
+      expect(errors.size).to eq(1)
+      expect(errors.first[:content]).to include("NameError")
+    end
+
+    it "evaluates string literals as Ruby" do
+      submit(model, '"hello world"')
+      ruby_msgs = model.chat_history.select { |m| m[:role] == :ruby }
+      expect(ruby_msgs.size).to eq(1)
+      expect(ruby_msgs.first[:content]).to include("hello world")
+    end
+
+    it "evaluates array literals as Ruby" do
+      submit(model, "[1, 2, 3]")
+      ruby_msgs = model.chat_history.select { |m| m[:role] == :ruby }
+      expect(ruby_msgs.size).to eq(1)
+      expect(ruby_msgs.first[:content]).to include("1")
+    end
+
+    it "returns MVU tuple from handle_smart_input" do
+      result = submit(model, "42")
+      expect_mvu_tuple(result)
     end
   end
 
@@ -316,13 +340,36 @@ RSpec.describe Claw::TUI::Model do
       model.update(make_key("down"))
       expect(model.textarea.value).to eq("")
     end
+
+    it "does nothing when history is empty" do
+      model.update(make_key("up"))
+      expect(model.textarea.value).to eq("")
+    end
+
+    it "does not go past oldest entry" do
+      submit(model, "only_one")
+      model.update(make_key("up"))
+      model.update(make_key("up"))  # should stay at oldest
+      expect(model.textarea.value).to eq("only_one")
+    end
+
+    it "preserves saved input after up/down cycle" do
+      model.textarea.value = "partial"
+      model.update(make_key("a"))  # type 'a' to get "partiala" in textarea
+      submit(model, "1 + 1")
+      # Type something, then navigate up and back down
+      model.textarea.value = "typing..."
+      model.update(make_key("up"))
+      expect(model.textarea.value).to eq("1 + 1")
+      model.update(make_key("down"))
+      expect(model.textarea.value).to eq("typing...")
+    end
   end
 
   describe "tab completion (#7)" do
     before { model.init }
 
     it "completes single candidate" do
-      # Define a unique method to have something to complete
       submit(model, "def zzz_unique_test_method; end")
       model.textarea.value = "zzz_unique"
       model.update(make_key("tab"))
@@ -332,10 +379,28 @@ RSpec.describe Claw::TUI::Model do
     it "shows multiple candidates in chat" do
       model.textarea.value = "/h"
       model.update(make_key("tab"))
-      # Should show candidates like /help, /history in chat
       system_msgs = model.chat_history.select { |m| m[:role] == :system }
-      # At minimum the init message; may have candidates too
-      expect(model.chat_history.size).to be >= 1
+      expect(system_msgs.size).to be >= 2  # init msg + candidates
+    end
+
+    it "does nothing on empty prefix" do
+      model.textarea.value = ""
+      before_count = model.chat_history.size
+      model.update(make_key("tab"))
+      expect(model.chat_history.size).to eq(before_count)
+    end
+
+    it "does nothing when no matches" do
+      model.textarea.value = "zzz_no_match_xyz_999"
+      before_count = model.chat_history.size
+      model.update(make_key("tab"))
+      expect(model.chat_history.size).to eq(before_count)
+    end
+
+    it "completes slash commands" do
+      model.textarea.value = "/sn"
+      model.update(make_key("tab"))
+      expect(model.textarea.value).to eq("/snapshot")
     end
   end
 
@@ -357,10 +422,50 @@ RSpec.describe Claw::TUI::Model do
     end
   end
 
+  describe "/source REPL fallback (#14)" do
+    before { model.init }
+
+    it "shows tracked REPL definition for /source" do
+      submit(model, "def zzz_src_test; 42; end")
+      submit(model, "/source zzz_src_test")
+      system_msgs = model.chat_history.select { |m| m[:role] == :system && m[:content]&.include?("zzz_src_test") }
+      expect(system_msgs).not_to be_empty
+    end
+  end
+
+  describe "eval_ruby error handling" do
+    it "catches SyntaxError in eval_ruby" do
+      result = model.executor.eval_ruby("def end", model.send(:instance_variable_get, :@caller_binding))
+      expect(result[:success]).to be false
+      expect(result[:error]).to be_a(SyntaxError)
+    end
+
+    it "catches NameError in eval_ruby" do
+      result = model.executor.eval_ruby("undefined_var_xyz", model.send(:instance_variable_get, :@caller_binding))
+      expect(result[:success]).to be false
+      expect(result[:error]).to be_a(NameError)
+    end
+
+    it "returns success for valid Ruby" do
+      result = model.executor.eval_ruby("1 + 1", model.send(:instance_variable_get, :@caller_binding))
+      expect(result[:success]).to be true
+      expect(result[:result]).to eq(2)
+    end
+  end
+
   describe "baseline methods (#9)" do
     it "records baseline methods at init" do
       expect(model.baseline_methods).to be_an(Array)
       expect(model.baseline_methods).to include(:inspect)
+    end
+
+    it "detects new methods after definition" do
+      model.init
+      submit(model, "def zzz_baseline_test; end")
+      binding_obj = model.send(:instance_variable_get, :@caller_binding)
+      current = binding_obj.eval("methods")
+      new_methods = current - model.baseline_methods
+      expect(new_methods).to include(:zzz_baseline_test)
     end
   end
 

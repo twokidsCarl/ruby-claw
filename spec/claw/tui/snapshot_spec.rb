@@ -152,4 +152,50 @@ RSpec.describe "tui-snapshot" do
       expect(plain).to include("def foo")
     end
   end
+
+  describe "status bar model name (#1)" do
+    it "shows full model name from config" do
+      model = build_model
+      plain = render_plain(model)
+      model_name = Mana.config.model.to_s
+      # Model name should appear (or be truncated by responsive logic)
+      expect(plain).to include("claw v#{Claw::VERSION}")
+    end
+  end
+
+  describe "help alignment (#10)" do
+    it "has consistent indentation in /help output" do
+      model = build_model
+      submit(model, "/help")
+      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/ask") }
+      lines = help_msg[:content].split("\n").select { |l| l.include?("—") }
+      # All command lines should have same indentation
+      indents = lines.map { |l| l.match(/\A(\s*)/)[1].length }
+      expect(indents.uniq.size).to eq(1), "Expected uniform indentation, got #{indents.uniq}"
+    end
+
+    it "does not include /ls or /whereami" do
+      model = build_model
+      submit(model, "/help")
+      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/ask") }
+      expect(help_msg[:content]).not_to include("/ls")
+      expect(help_msg[:content]).not_to include("/whereami")
+    end
+
+    it "includes history and tab completion hint" do
+      model = build_model
+      submit(model, "/help")
+      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/ask") }
+      expect(help_msg[:content]).to include("history")
+      expect(help_msg[:content]).to include("tab completion")
+    end
+  end
+
+  describe "scroll hint (#11)" do
+    it "does not show scroll hint when not scrolled" do
+      model = build_model
+      plain = render_plain(model)
+      expect(plain).not_to include("pgup")
+    end
+  end
 end

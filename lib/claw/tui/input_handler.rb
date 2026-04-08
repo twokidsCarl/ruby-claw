@@ -26,14 +26,18 @@ module Claw
       def self.completions(prefix, binding:, memory: nil)
         candidates = []
 
-        # Local variables
-        candidates.concat(binding.local_variables.map(&:to_s))
+        begin
+          # Local variables
+          candidates.concat(binding.local_variables.map(&:to_s))
 
-        # Receiver methods (filtered)
-        receiver = binding.eval("self")
-        candidates.concat(
-          receiver.methods.map(&:to_s).reject { |m| m.start_with?("_") || m.include?("!") && m.length < 3 }
-        )
+          # Receiver methods (filtered)
+          receiver = binding.eval("self")
+          candidates.concat(
+            receiver.methods.map(&:to_s).reject { |m| m.start_with?("_") || (m.include?("!") && m.length < 3) }
+          )
+        rescue
+          # Binding is invalid or inaccessible; skip local completions
+        end
 
         # Slash commands
         candidates.concat(Claw::Commands::COMMANDS.map { |c| "/#{c}" })
@@ -41,9 +45,13 @@ module Claw
 
         # Memory keywords
         if memory
-          memory.long_term.each do |m|
-            words = m[:content].to_s.split(/\s+/).select { |w| w.length > 3 }
-            candidates.concat(words)
+          begin
+            memory.long_term.each do |m|
+              words = m[:content].to_s.split(/\s+/).select { |w| w.length > 3 }
+              candidates.concat(words)
+            end
+          rescue
+            # Memory access failed; skip
           end
         end
 

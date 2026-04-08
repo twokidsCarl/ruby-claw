@@ -6,7 +6,7 @@ module Claw
     # Dynamically drops lower-priority items when viewport is too narrow.
     module StatusBar
       def self.render(model, width)
-        right = build_right(model, width)
+        right = build_right(model)
 
         # Left items in priority order (last dropped first)
         left_items = [
@@ -28,7 +28,7 @@ module Claw
         Styles::STATUS_BAR.width(width).render(text)
       end
 
-      def self.build_right(model, width)
+      def self.build_right(model)
         parts = []
         parts << "↑pgup ↓pgdn" if model.scrolled_up?
         parts << "mode: #{model.mode}" if model.mode != :normal
