@@ -36,11 +36,11 @@ module Claw
       def overview
         <<~TEXT
           ruby-claw v#{Claw::VERSION} is an Agent framework built on ruby-mana.
-          It adds interactive chat, persistent memory with compaction, session persistence,
+          It adds a full-screen TUI, persistent memory with compaction, session persistence,
           knowledge base, and runtime state serialization.
 
           Key components:
-          - Claw::Chat — interactive REPL with streaming markdown output
+          - Claw::TUI — full-screen terminal UI with streaming markdown output
           - Claw::Memory — enhanced memory with compaction, search, and session persistence
           - Claw::Serializer — save/restore runtime state across process restarts
           - Claw::Knowledge — extended knowledge base with claw-specific topics

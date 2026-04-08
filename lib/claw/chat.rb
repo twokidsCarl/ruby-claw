@@ -25,6 +25,7 @@ module Claw
     HISTORY_MAX  = 1000
 
     def self.start(caller_binding)
+      warn "Claw::Chat.start is deprecated. Use `claw` command to launch the TUI."
       require "reline"
       load_history
       load_compiled_methods(caller_binding)

@@ -9,7 +9,8 @@ module Claw
     # MVU Model — central state for the TUI application.
     # Implements Bubbletea's init/update/view protocol.
     class Model
-      attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea
+      attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea,
+                  :baseline_methods, :input_history
 
       def initialize(caller_binding)
         @caller_binding = caller_binding
@@ -18,12 +19,16 @@ module Claw
         @mode = :normal  # :normal | :plan
         @scrolled_up = false
         @text_buffer = +""  # accumulates streaming text
+        @input_history = []
+        @history_index = nil
+        @baseline_methods = caller_binding.eval("methods").dup
 
         # Bubbles components
         @chat_viewport = Bubbles::Viewport.new(width: 80, height: 20)
         @spinner = Bubbles::Spinner.new
         @spinner.style = Styles::SPINNER_STYLE
         @textarea = Bubbles::TextArea.new(width: 70, height: 1)
+        @textarea.end_of_buffer_character = " "
         @textarea.placeholder = "Ruby expression, or /help"
         @textarea.placeholder_style = Lipgloss::Style.new.foreground(Styles::DIM_GRAY)
         @textarea.prompt = prompt_text
@@ -148,6 +153,25 @@ module Claw
             # Complete input — submit
             return submit_textarea
           end
+        when "up"
+          if @textarea.line_count <= 1
+            navigate_history(:up)
+            return [self, Bubbletea.none]
+          else
+            @textarea, ta_cmd = @textarea.update(msg)
+            return [self, ta_cmd]
+          end
+        when "down"
+          if @textarea.line_count <= 1
+            navigate_history(:down)
+            return [self, Bubbletea.none]
+          else
+            @textarea, ta_cmd = @textarea.update(msg)
+            return [self, ta_cmd]
+          end
+        when "tab"
+          handle_tab_completion
+          return [self, Bubbletea.none]
         end
 
         # All other keys → forward to textarea
@@ -175,12 +199,14 @@ module Claw
 
         @chat_history << { role: :user, content: text }
         @scrolled_up = false
+        @input_history << text
+        @history_index = nil
 
         if text.start_with?("/")
           handle_slash(text)
         else
-          # Ruby-first REPL: all non-slash input is evaluated as Ruby
-          handle_ruby(text)
+          # Smart routing: try Ruby first, fallback to AI like Claw::Chat
+          handle_smart_input(text)
         end
       end
 
@@ -189,29 +215,31 @@ module Claw
         arg = args.first
 
         if cmd == "help"
-          help = [
-            "/help         — show this help",
-            "/ask <text>   — ask AI",
-            "/new          — new session",
-            "/status       — runtime status",
-            "/snapshot [l] — create snapshot",
-            "/rollback <id>— restore snapshot",
-            "/diff [a] [b] — diff snapshots",
-            "/history      — list snapshots",
-            "/plan         — toggle plan mode",
-            "/ls           — list bindings",
-            "/cd <obj>     — navigate into object",
-            "/source <m>   — show method source",
-            "/doc <m>      — show method docs",
-            "/find <pat>   — search methods",
-            "/whereami     — current location",
-            "/role [name]  — switch role",
-            "/evolve       — run evolution",
-            "/forge <m>    — promote method",
-            "",
-            "All other input is evaluated as Ruby.",
-            "exit/quit     — quit (or ctrl+d)",
+          cmds = [
+            ["/help",         "show this help"],
+            ["/ask <text>",   "ask AI (or just type natural language)"],
+            ["/new",          "new session"],
+            ["/status",       "runtime status"],
+            ["/snapshot [l]", "create snapshot"],
+            ["/rollback <id>","restore snapshot"],
+            ["/diff [a] [b]", "diff snapshots"],
+            ["/history",      "list snapshots"],
+            ["/plan",         "toggle plan mode"],
+            ["/cd <obj>",     "navigate into object"],
+            ["/source <m>",   "show method source"],
+            ["/doc <m>",      "show method docs"],
+            ["/find <pat>",   "search methods"],
+            ["/role [name]",  "switch role"],
+            ["/evolve",       "run evolution"],
+            ["/forge <m>",    "promote method"],
           ]
+          max_cmd = cmds.map { |c, _| c.length }.max
+          help = cmds.map { |c, d| "  %-#{max_cmd}s — %s" % [c, d] }
+          help << ""
+          help << "  Ruby expressions are evaluated directly."
+          help << "  Natural language is sent to AI automatically."
+          help << "  exit/quit — quit (or ctrl+d)"
+          help << "  ↑↓ history | tab completion | pgup/pgdn scroll"
           @chat_history << { role: :system, content: help.join("\n") }
           return [self, Bubbletea.none]
         end
@@ -242,13 +270,6 @@ module Claw
 
         # Object explorer commands
         case cmd
-        when "ls"
-          result = ObjectExplorer.ls(@caller_binding)
-          if result[:type] == :data
-            lines = result[:data].flat_map { |section, items| ["#{section}:", *items] }
-            @chat_history << { role: :system, content: lines.join("\n") }
-          end
-          return [self, Bubbletea.none]
         when "cd"
           @nav_stack ||= []
           result = ObjectExplorer.cd(arg || "..", @caller_binding, @nav_stack)
@@ -263,6 +284,27 @@ module Claw
           result = ObjectExplorer.source(arg.to_s, @caller_binding)
           if result[:type] == :data
             @chat_history << { role: :system, content: "#{result[:data][:file]}:#{result[:data][:line]}\n#{result[:data][:source]}" }
+          elsif result[:type] == :error && result[:message]&.include?("not found")
+            # Try to find REPL-defined source from tracked definitions
+            receiver = @caller_binding.eval("self")
+            defs = receiver.instance_variable_defined?(:@__claw_definitions__) ?
+              receiver.instance_variable_get(:@__claw_definitions__) : {}
+            if defs[arg.to_s]
+              @chat_history << { role: :system, content: "(defined in REPL)\n#{defs[arg.to_s]}" }
+            else
+              # Check if method exists but source is (eval)
+              begin
+                meth = @caller_binding.eval("method(:#{arg})")
+                loc = meth.source_location
+                if loc && loc[0] == "(eval)"
+                  @chat_history << { role: :system, content: "Method '#{arg}' defined in REPL session (source not available)" }
+                else
+                  @chat_history << { role: :error, content: result[:message] }
+                end
+              rescue
+                @chat_history << { role: :error, content: result[:message] }
+              end
+            end
           else
             @chat_history << { role: :error, content: result[:message] }
           end
@@ -279,16 +321,40 @@ module Claw
             @chat_history << { role: :system, content: result[:message] }
           end
           return [self, Bubbletea.none]
-        when "whereami"
-          result = ObjectExplorer.whereami(@caller_binding)
-          d = result[:data]
-          @chat_history << { role: :system, content: "#{d[:file]}:#{d[:line]} (#{d[:receiver]})" }
-          return [self, Bubbletea.none]
         end
 
         result = Claw::Commands.dispatch(cmd, arg, runtime: @runtime)
         handle_command_result(CommandResultMsg.new(result: result, cmd: cmd))
         [self, Bubbletea.none]
+      end
+
+      def handle_smart_input(text)
+        if ruby_syntax?(text)
+          # Valid Ruby syntax → eval, with NameError/NoMethodError fallback to AI
+          eval_result = @executor.eval_ruby(text, @caller_binding)
+          if eval_result[:success]
+            @chat_history << { role: :ruby, content: pretty_inspect(eval_result[:result]) }
+            if eval_result[:result].is_a?(Symbol) && text.strip.match?(/\Adef\s/)
+              track_definition(@caller_binding, text, eval_result[:result])
+            end
+            @runtime&.resources&.dig("binding")&.scan_binding
+            return [self, Bubbletea.none]
+          end
+
+          err = eval_result[:error]
+          if (err.is_a?(NameError) || err.is_a?(NoMethodError)) &&
+             (text.include?(" ") || text.match?(/[^\x00-\x7F]/))
+            # Multi-word or non-ASCII that failed as Ruby → fallback to AI
+            handle_llm(text)
+          else
+            @chat_history << { role: :error, content: "#{err.class}: #{err.message}" }
+            @runtime&.resources&.dig("binding")&.scan_binding
+            [self, Bubbletea.none]
+          end
+        else
+          # Not valid Ruby syntax → send to AI directly
+          handle_llm(text)
+        end
       end
 
       def handle_ruby(code)
@@ -304,6 +370,59 @@ module Claw
         end
         @runtime&.resources&.dig("binding")&.scan_binding
         [self, Bubbletea.none]
+      end
+
+      def ruby_syntax?(input)
+        RubyVM::InstructionSequence.compile(input)
+        true
+      rescue SyntaxError
+        false
+      end
+
+      def navigate_history(direction)
+        return if @input_history.empty?
+
+        if direction == :up
+          if @history_index.nil?
+            @saved_input = @textarea.value
+            @history_index = @input_history.size - 1
+          elsif @history_index > 0
+            @history_index -= 1
+          else
+            return
+          end
+          @textarea.reset
+          @textarea.value = @input_history[@history_index]
+        else # :down
+          return if @history_index.nil?
+          if @history_index < @input_history.size - 1
+            @history_index += 1
+            @textarea.reset
+            @textarea.value = @input_history[@history_index]
+          else
+            @history_index = nil
+            @textarea.reset
+            @textarea.value = @saved_input || ""
+          end
+        end
+      end
+
+      def handle_tab_completion
+        prefix = @textarea.value
+        return if prefix.empty?
+
+        candidates = InputHandler.completions(prefix, binding: @caller_binding, memory: Claw.memory)
+        return if candidates.empty?
+
+        if candidates.size == 1
+          @textarea.reset
+          @textarea.value = candidates.first
+        else
+          # Show candidates in chat (up to 20)
+          display = candidates.first(20).join("  ")
+          display += "  ..." if candidates.size > 20
+          @chat_history << { role: :system, content: display }
+        end
       end
 
 

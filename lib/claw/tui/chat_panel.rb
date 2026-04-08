@@ -14,6 +14,8 @@ module Claw
         # Dynamic height: expand to actual line count, cap at 5
         line_count = [ta.line_count, 1].max
         ta.height = [line_count, 5].min
+        # Show line numbers in multi-line mode for visual clarity
+        ta.show_line_numbers = line_count > 1
         input_view = ta.view
         _, input_h = Lipgloss.size(input_view)
         input_h = [input_h, 5].min

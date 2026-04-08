@@ -43,9 +43,8 @@ module Claw
         begin
           b = binding_res.instance_variable_get(:@binding)
           receiver = b.eval("self")
-          # Filter to methods defined via def in REPL (exclude Object/Kernel defaults)
-          base_methods = Object.new.methods(false)
-          user_methods = (receiver.methods(false) - base_methods).sort
+          current_methods = b.eval("methods")
+          user_methods = (current_methods - (model.baseline_methods || [])).sort
           unless user_methods.empty?
             lines << Styles::SECTION_HEADER.render("Methods")
             user_methods.each do |m|
