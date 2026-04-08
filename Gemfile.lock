@@ -1,4 +1,14 @@
 PATH
+  remote: ../bubbletea-ruby
+  specs:
+    bubbletea (0.1.4)
+      lipgloss (~> 0.1)
+    bubbletea (0.1.4-arm64-darwin)
+      lipgloss (~> 0.1)
+    bubbletea (0.1.4-x86_64-linux-gnu)
+      lipgloss (~> 0.1)
+
+PATH
   remote: ../ruby-mana
   specs:
     ruby-mana (0.5.14)
@@ -37,12 +47,6 @@ GEM
       bubbletea
       harmonica
       lipgloss
-    bubbletea (0.1.4)
-      lipgloss (~> 0.1)
-    bubbletea (0.1.4-arm64-darwin)
-      lipgloss (~> 0.1)
-    bubbletea (0.1.4-x86_64-linux-gnu)
-      lipgloss (~> 0.1)
     bubblezone (0.1.2)
     bubblezone (0.1.2-arm64-darwin)
     bubblezone (0.1.2-x86_64-linux-gnu)
@@ -127,6 +131,7 @@ PLATFORMS
 
 DEPENDENCIES
   base64
+  bubbletea!
   rack-test (~> 2.0)
   rspec (~> 3.0)
   ruby-claw!
@@ -141,9 +146,9 @@ CHECKSUMS
   bigdecimal (4.1.0) sha256=6dc07767aa3dc456ccd48e7ae70a07b474e9afd7c5bc576f80bd6da5c8dd6cae
   binding_of_caller (2.0.0) sha256=e53eebf8428a85587aede7b43a83e7419eb85b8b690938a96aa330d03052d517
   bubbles (0.1.1) sha256=ac16a9adef1cd4d51d7246ea6cda1a745a56321cc21a49e150e7446d62797d05
-  bubbletea (0.1.4) sha256=33c3ea5eb7ab03160b942a9a8062ba04d0af2245a0b6b7457853ac4bd3218f69
-  bubbletea (0.1.4-arm64-darwin) sha256=112af8ba51b38c4281b648ce43375e9bbe7b666dbb30c8b8d1cd13b4e163e6cb
-  bubbletea (0.1.4-x86_64-linux-gnu) sha256=c1a06df5828c3af8ed664bf08591eba4bcb16aa44c58f8d21f7e2a01c2dea885
+  bubbletea (0.1.4)
+  bubbletea (0.1.4-arm64-darwin)
+  bubbletea (0.1.4-x86_64-linux-gnu)
   bubblezone (0.1.2) sha256=b6ddd6807caafb89e49bfdeea49ffc0276261e1599624037115b8f701417f67c
   bubblezone (0.1.2-arm64-darwin) sha256=a0b85377c57d5c69634d7862e45e62977a83f9458da4ed6f1d76a327f6b7933b
   bubblezone (0.1.2-x86_64-linux-gnu) sha256=b3ba8547f794397587cbdefe3638d354030a8736f074f3a2061caeed560fe0c7
