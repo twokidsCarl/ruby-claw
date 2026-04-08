@@ -2,7 +2,7 @@
 
 module Claw
   module TUI
-    # Object exploration commands (pry-style): /ls, /cd, /source, /doc, /find, /whereami.
+    # Object exploration commands (pry-style): /cd, /source, /doc, /find.
     module ObjectExplorer
       # @param binding [Binding]
       # @return [Hash] { type:, data: }

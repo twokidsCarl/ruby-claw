@@ -41,7 +41,7 @@ module Claw
 
         # Slash commands
         candidates.concat(Claw::Commands::COMMANDS.map { |c| "/#{c}" })
-        candidates.concat(%w[/plan /role /cd /source /doc /find /shell /memory /forget /help /ask /new])
+        candidates.concat(%w[/help /ask /new /plan /cd /source /doc /find])
 
         # Memory keywords
         if memory
