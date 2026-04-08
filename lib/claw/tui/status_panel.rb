@@ -7,11 +7,11 @@ module Claw
       def self.render(model, width, height)
         sections = []
 
-        sections << render_binding(model, width - 4)
-        sections << render_snapshots(model, width - 4)
-        sections << render_memory(model, width - 4)
-        sections << render_tokens(model, width - 4)
-        sections << render_status(model, width - 4)
+        sections << render_binding(model, width - 2)
+        sections << render_snapshots(model, width - 2)
+        sections << render_memory(model, width - 2)
+        sections << render_tokens(model, width - 2)
+        sections << render_status(model, width - 2)
 
         # Truncate content to fit within available height
         all_lines = sections.join("\n").split("\n")
@@ -27,7 +27,9 @@ module Claw
         return "#{header}\n  (not tracked)" unless binding_res
 
         lines = [header]
-        binding_res.tracked.each do |name, blob|
+        baseline = model.baseline_vars || []
+        user_vars = binding_res.tracked.reject { |name, _| baseline.include?(name) }
+        user_vars.each do |name, blob|
           val = begin
             v = MarshalMd.load(blob)
             "#{v.class} (#{summary_value(v)})"
@@ -37,7 +39,7 @@ module Claw
           line = "  #{name}: #{val}"
           lines << truncate(line, width)
         end
-        lines << "  (empty)" if binding_res.tracked.empty?
+        lines << "  (empty)" if user_vars.empty?
 
         # Show user-defined methods (only those added during session)
         begin
@@ -81,7 +83,7 @@ module Claw
         count = memory.long_term.size
         lines = [header, "  #{count} facts"]
         memory.long_term.last(3).each do |m|
-          lines << "  · #{truncate(m[:content].to_s, width - 4)}"
+          lines << "  · #{truncate(m[:content].to_s, width - 2)}"
         end
         lines.join("\n")
       end

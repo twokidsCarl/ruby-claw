@@ -33,7 +33,7 @@ module Claw
     # Implements Bubbletea's init/update/view protocol.
     class Model
       attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea,
-                  :baseline_methods, :input_history, :zone
+                  :baseline_methods, :baseline_vars, :input_history, :zone
       attr_accessor :chat_ratio, :dragging_divider
 
       def initialize(caller_binding)
@@ -53,6 +53,11 @@ module Claw
         @zone = defined?(Bubblezone::Manager) ? Bubblezone::Manager.new : nil
         @baseline_methods = begin
           caller_binding.eval("methods").dup
+        rescue
+          []
+        end
+        @baseline_vars = begin
+          caller_binding.local_variables.map(&:to_s)
         rescue
           []
         end
