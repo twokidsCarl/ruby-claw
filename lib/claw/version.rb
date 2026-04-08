@@ -2,5 +2,5 @@
 
 module Claw
   VERSION = "0.2.2"
-  BUILD = "20260407-015"
+  BUILD = "20260407-016"
 end
