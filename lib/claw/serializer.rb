@@ -15,9 +15,9 @@ module Claw
       #
       # @param bind [Binding] the binding whose variables to save
       # @param dir [String] directory to write state files into
-      def save(bind, dir)
+      def save(bind, dir, baseline_vars: [])
         FileUtils.mkdir_p(dir)
-        save_values(bind, dir)
+        save_values(bind, dir, baseline_vars: baseline_vars)
         save_definitions(bind, dir)
       end
 
@@ -35,14 +35,16 @@ module Claw
 
       # --- Values ---
 
-      def save_values(bind, dir)
+      def save_values(bind, dir, baseline_vars: [])
         values = {}
         bind.local_variables.each do |name|
-          val = bind.local_variable_get(name)
-          next if name.to_s.start_with?("_")
+          name_s = name.to_s
+          next if name_s.start_with?("_")
+          next if baseline_vars.include?(name_s)
 
+          val = bind.local_variable_get(name)
           encoded = encode_value(val)
-          values[name.to_s] = encoded if encoded
+          values[name_s] = encoded if encoded
         end
 
         path = File.join(dir, VALUES_FILE)

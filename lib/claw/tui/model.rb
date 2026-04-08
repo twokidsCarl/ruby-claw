@@ -3,6 +3,7 @@
 require "bubbletea"
 require "bubbles"
 require "io/console"
+require "pp"
 
 begin
   require "bubblezone"
@@ -52,7 +53,7 @@ module Claw
         @view_height = 24
         @zone = defined?(Bubblezone::Manager) ? Bubblezone::Manager.new : nil
         @baseline_methods = begin
-          caller_binding.eval("methods").dup
+          caller_binding.eval("methods | private_methods").dup
         rescue
           []
         end
@@ -657,7 +658,7 @@ module Claw
       end
 
       def save_state
-        Claw::Serializer.save(@caller_binding, File.join(Dir.pwd, ".ruby-claw")) if Claw.config.persist_session
+        Claw::Serializer.save(@caller_binding, File.join(Dir.pwd, ".ruby-claw"), baseline_vars: @baseline_vars) if Claw.config.persist_session
         Claw.memory&.save_session
       rescue
         # ignore save failures
