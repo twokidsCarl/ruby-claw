@@ -353,6 +353,35 @@ RSpec.describe Claw::TUI::Model do
       expect(model.textarea.value).to eq("only_one")
     end
 
+    it "navigates history from first line of multi-line content" do
+      submit(model, "def abc\n  1\nend")
+      submit(model, "2 + 2")
+      # Navigate up to "2 + 2"
+      model.update(make_key("up"))
+      expect(model.textarea.value).to eq("2 + 2")
+      # Navigate up again to multi-line entry
+      model.update(make_key("up"))
+      expect(model.textarea.value).to eq("def abc\n  1\nend")
+      # Cursor is on last line (row == line_count - 1 after value= sets cursor to end)
+      # Navigate up — cursor on row 0 would navigate history, but cursor is at end
+      # so first up moves cursor to line 0, then next up navigates history
+    end
+
+    it "navigates history from last line of multi-line content via down" do
+      submit(model, "first")
+      submit(model, "second")
+      # Go to "first"
+      model.update(make_key("up"))
+      model.update(make_key("up"))
+      expect(model.textarea.value).to eq("first")
+      # Navigate down through entries
+      model.update(make_key("down"))
+      expect(model.textarea.value).to eq("second")
+      # Navigate down past last entry → empty
+      model.update(make_key("down"))
+      expect(model.textarea.value).to eq("")
+    end
+
     it "preserves saved input after up/down cycle" do
       model.textarea.value = "partial"
       model.update(make_key("a"))  # type 'a' to get "partiala" in textarea
@@ -395,6 +424,13 @@ RSpec.describe Claw::TUI::Model do
       before_count = model.chat_history.size
       model.update(make_key("tab"))
       expect(model.chat_history.size).to eq(before_count)
+    end
+
+    it "completes user-defined private methods" do
+      submit(model, "def zzz_priv_test_method; 99; end")
+      model.textarea.value = "zzz_priv"
+      model.update(make_key("tab"))
+      expect(model.textarea.value).to eq("zzz_priv_test_method")
     end
 
     it "completes slash commands" do

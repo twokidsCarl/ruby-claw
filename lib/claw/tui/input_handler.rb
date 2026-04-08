@@ -35,6 +35,16 @@ module Claw
           candidates.concat(
             receiver.methods.map(&:to_s).reject { |m| m.start_with?("_") || (m.include?("!") && m.length < 3) }
           )
+
+          # Include private methods (def in eval creates private methods)
+          candidates.concat(
+            receiver.private_methods(false).map(&:to_s).reject { |m| m.start_with?("_") || (m.include?("!") && m.length < 3) }
+          )
+
+          # Include tracked REPL definitions
+          if receiver.instance_variable_defined?(:@__claw_definitions__)
+            candidates.concat(receiver.instance_variable_get(:@__claw_definitions__).keys)
+          end
         rescue
           # Binding is invalid or inaccessible; skip local completions
         end
