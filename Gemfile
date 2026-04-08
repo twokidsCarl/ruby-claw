@@ -4,10 +4,10 @@ gemspec
 
 if ENV["CI"]
   gem "ruby-mana", github: "twokidsCarl/ruby-mana", branch: "main"
-  gem "bubbletea", github: "twokidsCarl/bubbletea-ruby", branch: "fix/ime-multi-byte-input"
+  # CI uses precompiled gem from RubyGems; IME fix only needed at runtime
 else
   gem "ruby-mana", path: "../ruby-mana"
-  gem "bubbletea", path: "../bubbletea-ruby"
+  gem "bubbletea", path: "../bubbletea-ruby"  # local fork with IME multi-byte fix
 end
 gem "base64"  # extracted from stdlib in Ruby 3.4, needed by marshal-md
 
