@@ -44,8 +44,16 @@ module Claw
       config
     end
 
-    def chat
-      Chat.start(binding.of_caller(1))
+    # Embedded API: send a single prompt to the agent.
+    # For interactive use, run `claw` to launch the TUI.
+    def chat(prompt = nil)
+      if prompt
+        engine = Mana::Engine.new(binding.of_caller(1))
+        engine.execute(prompt)
+      else
+        warn "Claw.chat without arguments is deprecated. Use `claw` command to launch the TUI."
+        TUI.start(binding.of_caller(1))
+      end
     end
 
     def memory

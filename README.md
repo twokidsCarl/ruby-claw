@@ -15,17 +15,11 @@ gem install ruby-claw
 ## Features
 
 ### Interactive TUI
-Running `claw` launches a full-screen terminal UI (built on Charm Ruby's bubbletea) with 4 zones: top status bar, left chat panel, right status panel, and bottom command bar.
+`claw` launches a full-screen terminal UI (built on Charm Ruby's bubbletea) with 4 zones: top status bar, left chat panel, right status panel, and bottom command bar. All interaction happens in the TUI — type Ruby expressions directly, or use `/ask` to talk to the AI agent.
 
-`Claw.chat` still works for the legacy REPL mode:
-```ruby
-require "claw"
-Claw.chat
-```
-
-- Auto-detects Ruby code vs natural language
+- Ruby-first: expressions are evaluated directly
+- Natural language is automatically routed to the AI agent
 - Streaming output with markdown rendering
-- `!` prefix forces Ruby eval
 - Session persists across restarts
 
 ### Persistent Memory
@@ -98,7 +92,7 @@ claw> /rollback 2
   ✓ rolled back to snapshot #2
 ```
 
-**REPL commands:**
+**Slash commands:**
 | Command | Description |
 |---------|-------------|
 | `/snapshot [label]` | Snapshot all resources |
@@ -291,7 +285,7 @@ Mana.register_prompt_section { |context| memory_text }
 ```
 
 - **ruby-mana** = Embedded LLM engine (`~"..."` syntax, binding manipulation, tool calling)
-- **ruby-claw** = Agent framework (chat REPL, memory, persistence, knowledge)
+- **ruby-claw** = Agent framework (TUI, memory, persistence, knowledge)
 
 Claw depends on mana. You can use mana standalone for embedding LLM in Ruby code, or add claw for interactive agent features.
 

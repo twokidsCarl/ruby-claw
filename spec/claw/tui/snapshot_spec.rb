@@ -84,7 +84,7 @@ RSpec.describe "tui-snapshot" do
       expect(help_msg[:content]).to include("/snapshot")
       expect(help_msg[:content]).to include("/ask")
       expect(help_msg[:content]).to include("/new")
-      expect(help_msg[:content]).to include("All other input is evaluated as Ruby.")
+      expect(help_msg[:content]).to include("Ruby expressions are evaluated directly.")
     end
   end
 

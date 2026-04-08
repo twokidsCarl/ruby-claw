@@ -95,7 +95,7 @@ module Claw
       def eval_ruby(code, binding)
         result = binding.eval(code)
         { success: true, result: result }
-      rescue => e
+      rescue StandardError, SyntaxError, ScriptError => e
         { success: false, error: e }
       end
     end
