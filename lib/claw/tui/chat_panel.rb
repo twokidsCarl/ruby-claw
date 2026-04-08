@@ -10,10 +10,12 @@ module Claw
       def self.render(model, width, height)
         # Configure textarea width and render it
         ta = model.textarea
-        ta.width = width - 4
+        ta.width = width - 2
         # Dynamic height: expand to actual line count, cap at 5
         line_count = [ta.line_count, 1].max
         ta.height = [line_count, 5].min
+        # Recalculate viewport offset with new height (stale from previous render cycle)
+        ta.instance_variable_set(:@viewport_offset, [ta.row - ta.height + 1, 0].max)
         # Show line numbers in multi-line mode for visual clarity
         ta.show_line_numbers = line_count > 1
         input_view = ta.view
@@ -21,15 +23,15 @@ module Claw
         input_h = [input_h, 5].min
 
         # Chat viewport fills remaining space
-        chat_height = height - input_h - 1
+        chat_height = height - input_h
         chat_height = 3 if chat_height < 3
 
         # Render chat messages
-        content = render_messages(model.chat_history, width - 4)
+        content = render_messages(model.chat_history, width - 2, zone: model.zone)
 
         # Set up viewport
         viewport = model.chat_viewport
-        viewport.width = width - 4
+        viewport.width = width - 2
         viewport.height = chat_height
         viewport.content = content
         viewport.goto_bottom unless model.scrolled_up?
@@ -41,12 +43,12 @@ module Claw
         Styles::PANEL_BORDER.width(width).height(height).render(panel)
       end
 
-      def self.render_messages(messages, width)
+      def self.render_messages(messages, width, zone: nil)
         # Fold consecutive tool calls
         messages = Folding.fold_tool_calls(messages)
 
         lines = []
-        messages.each do |msg|
+        messages.each_with_index do |msg, idx|
           case msg[:role]
           when :user
             lines << Styles::USER_STYLE.render(">> #{msg[:content]}")
@@ -56,7 +58,10 @@ module Claw
             rescue
               msg[:content].to_s
             end
-            folded = Folding.fold_text(rendered.rstrip)
+            folded = Folding.fold_text(rendered.rstrip, zone: zone, fold_id: idx)
+            if folded[:folded]
+              msg[:folded_full] = folded[:full]
+            end
             lines << Styles::AGENT_STYLE.render("claw> ") + folded[:display]
           when :tool_call
             lines << Styles::TOOL_STYLE.render("  #{msg[:icon] || "⚡"} #{msg[:detail]}")
@@ -68,7 +73,8 @@ module Claw
           when :error
             lines << Styles::ERROR_STYLE.render("error: #{msg[:content]}")
           when :system
-            lines << Styles::TOOL_STYLE.render("  #{msg[:content]}")
+            indented = msg[:content].to_s.gsub(/^/, "  ")
+            lines << Styles::TOOL_STYLE.render(indented)
           end
         end
         lines.join("\n")

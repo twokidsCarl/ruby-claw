@@ -4,13 +4,37 @@ require "bubbletea"
 require "bubbles"
 require "io/console"
 
+begin
+  require "bubblezone"
+rescue LoadError
+  # bubblezone gem ships versioned native extensions (e.g. 4.0/bubblezone.bundle)
+  # but its loader may not route by Ruby version. Patch and retry.
+  begin
+    spec = Gem::Specification.find_by_name("bubblezone")
+    major, minor, = RUBY_VERSION.split(".")
+    versioned_dir = File.join(spec.gem_dir, "lib", "bubblezone", "#{major}.#{minor}")
+    if File.directory?(versioned_dir)
+      # Add versioned dir so require_relative "bubblezone/bubblezone" resolves
+      target = File.join(spec.gem_dir, "lib", "bubblezone", "bubblezone.bundle")
+      source = File.join(versioned_dir, "bubblezone.bundle")
+      unless File.exist?(target)
+        File.symlink(source, target)
+      end
+      require "bubblezone"
+    end
+  rescue LoadError, Gem::MissingSpecError, Errno::EEXIST, Errno::EACCES
+    # mouse click zones will be disabled but scroll/drag still work.
+  end
+end
+
 module Claw
   module TUI
     # MVU Model — central state for the TUI application.
     # Implements Bubbletea's init/update/view protocol.
     class Model
       attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea,
-                  :baseline_methods, :input_history
+                  :baseline_methods, :input_history, :zone
+      attr_accessor :chat_ratio, :dragging_divider
 
       def initialize(caller_binding)
         @caller_binding = caller_binding
@@ -22,6 +46,11 @@ module Claw
         @input_history = []
         @history_index = nil
         @saved_input = +""
+        @chat_ratio = 0.70
+        @dragging_divider = false
+        @view_width = 80
+        @view_height = 24
+        @zone = defined?(Bubblezone::Manager) ? Bubblezone::Manager.new : nil
         @baseline_methods = begin
           caller_binding.eval("methods").dup
         rescue
@@ -60,6 +89,8 @@ module Claw
         cmd = case msg
               when Bubbletea::KeyMessage
                 return handle_key(msg)
+              when Bubbletea::MouseMessage
+                return handle_mouse(msg)
               when Bubbles::Spinner::TickMessage
                 @spinner, spinner_cmd = @spinner.update(msg)
                 Bubbletea.batch(spinner_cmd, Bubbletea.tick(1.0) { TickMsg.new(time: Time.now) })
@@ -91,6 +122,8 @@ module Claw
               when StateChangeMsg
                 Bubbletea.none
               when Bubbletea::WindowSizeMessage
+                @view_width = msg.width
+                @view_height = msg.height
                 Bubbletea.none
               else
                 Bubbletea.none
@@ -99,7 +132,8 @@ module Claw
       end
 
       def view
-        h, w = IO.console&.winsize || [24, 80]
+        w = @view_width
+        h = @view_height
         w = 80 if w < 40
         h = 24 if h < 12
         Layout.render(self, w, h)
@@ -122,6 +156,79 @@ module Claw
       def spinner_view = @spinner.view
 
       private
+
+      def handle_mouse(msg)
+        w = @view_width
+        h = @view_height
+        divider_x = (w * @chat_ratio).to_i
+
+        if msg.wheel?
+          if msg.button == Bubbletea::MouseMessage::BUTTON_WHEEL_UP
+            @chat_viewport.scroll_up(3)
+            @scrolled_up = true
+          else
+            @chat_viewport.scroll_down(3)
+            @scrolled_up = @chat_viewport.at_bottom? ? false : true
+          end
+        elsif msg.press?
+          if msg.left?
+            # Click near divider (±2 cols) and below status bar → start drag
+            if (msg.x - divider_x).abs <= 2 && msg.y > 1
+              @dragging_divider = true
+            else
+              handle_mouse_click(msg, w, h)
+            end
+          end
+        elsif msg.motion?
+          if @dragging_divider
+            @chat_ratio = (msg.x.to_f / w).clamp(0.3, 0.85)
+          end
+        elsif msg.release?
+          @dragging_divider = false
+        end
+
+        [self, Bubbletea.none]
+      end
+
+      def handle_mouse_click(msg, width, height)
+        return unless @zone
+        hit = @zone.find_in_bounds(msg.x, msg.y)
+        return unless hit
+        zone_id, _zone_info = hit
+
+        case zone_id
+        when /\Asnap_(\d+)\z/
+          snap_id = $1.to_i
+          @chat_history << {
+            role: :system,
+            content: "Snapshot ##{snap_id} selected. Type /rollback #{snap_id} to restore."
+          }
+
+        when /\Amem_(\d+)\z/
+          mem_id = $1.to_i
+          fact = Claw.memory&.long_term&.find { |m| m[:id] == mem_id }
+          if fact
+            @chat_history << { role: :system, content: "Memory ##{mem_id}: #{fact[:content]}" }
+          end
+
+        when /\Atool_(.+)\z/
+          tool_name = $1
+          @chat_history << {
+            role: :system,
+            content: "Tool: #{tool_name}. Use /forge #{tool_name} to promote."
+          }
+
+        when /\Afold_(\d+)\z/
+          idx = $1.to_i
+          if idx < @chat_history.size
+            m = @chat_history[idx]
+            if m[:folded_full]
+              m[:content] = m[:folded_full]
+              m.delete(:folded_full)
+            end
+          end
+        end
+      end
 
       def handle_key(msg)
         key = msg.to_s
@@ -159,7 +266,7 @@ module Claw
             return submit_textarea
           end
         when "up"
-          if @textarea.line_count <= 1
+          if @textarea.line_count <= 1 || @textarea.row == 0
             navigate_history(:up)
             return [self, Bubbletea.none]
           else
@@ -167,7 +274,7 @@ module Claw
             return [self, ta_cmd]
           end
         when "down"
-          if @textarea.line_count <= 1
+          if @textarea.line_count <= 1 || @textarea.row == @textarea.line_count - 1
             navigate_history(:down)
             return [self, Bubbletea.none]
           else
