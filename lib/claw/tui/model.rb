@@ -34,10 +34,10 @@ module Claw
     # Implements Bubbletea's init/update/view protocol.
     class Model
       attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea,
-                  :baseline_methods, :baseline_vars, :input_history, :zone
+                  :baseline_methods, :baseline_vars, :input_history, :zone, :tab_hint
       attr_accessor :chat_ratio, :dragging_divider
 
-      def initialize(caller_binding)
+      def initialize(caller_binding, baseline_methods: nil, baseline_vars: nil)
         @caller_binding = caller_binding
         @runtime = init_runtime(caller_binding)
         @chat_history = []
@@ -49,15 +49,16 @@ module Claw
         @saved_input = +""
         @chat_ratio = 0.70
         @dragging_divider = false
+        @tab_hint = nil
         @view_width = 80
         @view_height = 24
         @zone = defined?(Bubblezone::Manager) ? Bubblezone::Manager.new : nil
-        @baseline_methods = begin
+        @baseline_methods = baseline_methods || begin
           caller_binding.eval("methods | private_methods").dup
         rescue
           []
         end
-        @baseline_vars = begin
+        @baseline_vars = baseline_vars || begin
           caller_binding.local_variables.map(&:to_s)
         rescue
           []
@@ -67,7 +68,7 @@ module Claw
         @chat_viewport = Bubbles::Viewport.new(width: 80, height: 20)
         @spinner = Bubbles::Spinner.new
         @spinner.style = Styles::SPINNER_STYLE
-        @textarea = Bubbles::TextArea.new(width: 70, height: 1)
+        @textarea = RubyTextArea.new(width: 70, height: 1)
         @textarea.end_of_buffer_character = " "
         @textarea.placeholder = "Ruby expression, or /help"
         @textarea.placeholder_style = Lipgloss::Style.new.foreground(Styles::DIM_GRAY)
@@ -239,6 +240,9 @@ module Claw
       def handle_key(msg)
         key = msg.to_s
 
+        # Clear transient tab hint on any non-tab key
+        @tab_hint = nil unless key == "tab"
+
         case key
         when "ctrl+d"
           save_state
@@ -266,6 +270,15 @@ module Claw
           elsif incomplete_ruby_input?(text)
             # Incomplete Ruby — let textarea insert newline for continuation
             @textarea, ta_cmd = @textarea.update(msg)
+            # Auto-indent: insert spaces at cursor on the new line
+            indent = InputHandler.indent_level(@textarea.value)
+            if indent > 0
+              spaces = " " * indent
+              lines = @textarea.instance_variable_get(:@lines)
+              row = @textarea.row
+              lines[row] = spaces + lines[row].to_s
+              @textarea.instance_variable_set(:@col, indent)
+            end
             return [self, ta_cmd]
           else
             # Complete input — submit
@@ -294,6 +307,21 @@ module Claw
 
         # All other keys → forward to textarea
         @textarea, ta_cmd = @textarea.update(msg)
+
+        # Auto-dedent: when user completes typing "end", reduce indent
+        if @textarea.line_count > 1
+          lines = @textarea.instance_variable_get(:@lines)
+          row = @textarea.row
+          current = lines[row].to_s
+          if current.match?(/\A\s+end\s*\z/)
+            stripped = current.sub(/\A  /, "")
+            if stripped != current
+              lines[row] = stripped
+              @textarea.instance_variable_set(:@col, [@textarea.col - 2, 0].max)
+            end
+          end
+        end
+
         [self, ta_cmd]
       end
 
@@ -335,7 +363,6 @@ module Claw
         if cmd == "help"
           cmds = [
             ["/help",         "show this help"],
-            ["/ask <text>",   "ask AI (or just type natural language)"],
             ["/new",          "new session"],
             ["/status",       "runtime status"],
             ["/snapshot [l]", "create snapshot"],
@@ -359,15 +386,6 @@ module Claw
           help << "  exit/quit — quit (or ctrl+d)"
           help << "  ↑↓ history | tab completion | pgup/pgdn scroll"
           @chat_history << { role: :system, content: help.join("\n") }
-          return [self, Bubbletea.none]
-        end
-
-        if cmd == "ask"
-          if arg && !arg.strip.empty?
-            handle_llm(arg.strip)
-          else
-            @chat_history << { role: :error, content: "Usage: /ask <question>" }
-          end
           return [self, Bubbletea.none]
         end
 
@@ -451,6 +469,7 @@ module Claw
           # Valid Ruby syntax → eval, with NameError/NoMethodError fallback to AI
           eval_result = @executor.eval_ruby(text, @caller_binding)
           if eval_result[:success]
+            @chat_history << { role: :system, content: eval_result[:output] } if eval_result[:output]
             @chat_history << { role: :ruby, content: pretty_inspect(eval_result[:result]) }
             if eval_result[:result].is_a?(Symbol) && text.strip.match?(/\Adef\s/)
               track_definition(@caller_binding, text, eval_result[:result])
@@ -478,6 +497,7 @@ module Claw
       def handle_ruby(code)
         eval_result = @executor.eval_ruby(code, @caller_binding)
         if eval_result[:success]
+          @chat_history << { role: :system, content: eval_result[:output] } if eval_result[:output]
           @chat_history << { role: :ruby, content: pretty_inspect(eval_result[:result]) }
           # Track method definitions for session persistence
           if eval_result[:result].is_a?(Symbol) && code.strip.match?(/\Adef\s/)
@@ -535,11 +555,12 @@ module Claw
         if candidates.size == 1
           @textarea.reset
           @textarea.value = candidates.first
+          @tab_hint = nil
         else
-          # Show candidates in chat (up to 20)
+          # Show candidates as transient hint right above input bar
           display = candidates.first(20).join("  ")
           display += "  ..." if candidates.size > 20
-          @chat_history << { role: :system, content: display }
+          @tab_hint = display
         end
       rescue => e
         # Tab completion should never crash the TUI

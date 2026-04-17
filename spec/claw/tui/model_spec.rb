@@ -239,6 +239,33 @@ RSpec.describe Claw::TUI::Model do
       ruby_msgs = model.chat_history.select { |m| m[:role] == :ruby }
       expect(ruby_msgs.size).to eq(1)
     end
+
+    it "auto-indents after incomplete ruby" do
+      model.textarea.value = "def bar"
+      model.update(make_key("enter"))
+      # New line should be indented (2 spaces for 1 open block)
+      lines = model.textarea.instance_variable_get(:@lines)
+      expect(lines[1]).to start_with("  ")
+      expect(model.textarea.col).to eq(2)
+    end
+
+    it "auto-indents nested blocks" do
+      model.textarea.value = "def bar"
+      model.update(make_key("enter"))
+      # Now type "if true" on the indented line
+      lines = model.textarea.instance_variable_get(:@lines)
+      lines[1] = "  if true"
+      model.textarea.instance_variable_set(:@col, 9)
+      model.update(make_key("enter"))
+      # Third line should be indented 4 spaces (2 open blocks)
+      lines = model.textarea.instance_variable_get(:@lines)
+      expect(lines[2]).to start_with("    ")
+      expect(model.textarea.col).to eq(4)
+    end
+
+    it "uses RubyTextArea for syntax highlighting" do
+      expect(model.textarea).to be_a(Claw::TUI::RubyTextArea)
+    end
   end
 
   describe "#view" do
@@ -405,11 +432,19 @@ RSpec.describe Claw::TUI::Model do
       expect(model.textarea.value).to eq("zzz_unique_test_method")
     end
 
-    it "shows multiple candidates in chat" do
+    it "shows multiple candidates as a tab hint above input" do
       model.textarea.value = "/h"
       model.update(make_key("tab"))
-      system_msgs = model.chat_history.select { |m| m[:role] == :system }
-      expect(system_msgs.size).to be >= 2  # init msg + candidates
+      expect(model.tab_hint).to be_a(String)
+      expect(model.tab_hint).not_to be_empty
+    end
+
+    it "clears tab hint on next non-tab key" do
+      model.textarea.value = "/h"
+      model.update(make_key("tab"))
+      expect(model.tab_hint).not_to be_nil
+      model.update(make_key("a"))
+      expect(model.tab_hint).to be_nil
     end
 
     it "does nothing on empty prefix" do
