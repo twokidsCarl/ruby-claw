@@ -33,6 +33,20 @@ module Claw
 
       private
 
+      # Write `content` to `path` so a concurrent process never observes a
+      # partial file. Strategy: write to `path.tmp`, then rename — POSIX
+      # guarantees rename is atomic on the same filesystem, so readers either
+      # see the old file or the new file, never a half-written one.
+      #
+      # Without this, two ruby-claw sessions in the same directory could each
+      # exit at the same instant, both calling File.write on values.json, and
+      # produce a corrupted JSON file that fails to parse on next startup.
+      def atomic_write(path, content)
+        tmp = "#{path}.tmp.#{Process.pid}"
+        File.write(tmp, content)
+        File.rename(tmp, path)
+      end
+
       # --- Values ---
 
       def save_values(bind, dir, baseline_vars: [])
@@ -48,7 +62,7 @@ module Claw
         end
 
         path = File.join(dir, VALUES_FILE)
-        File.write(path, JSON.pretty_generate(values))
+        atomic_write(path, JSON.pretty_generate(values))
       end
 
       def restore_values(bind, dir)
@@ -120,7 +134,7 @@ module Claw
         return if definitions.nil? || definitions.empty?
 
         path = File.join(dir, DEFINITIONS_FILE)
-        File.write(path, definitions.values.join("\n\n"))
+        atomic_write(path, definitions.values.join("\n\n"))
       end
 
       def restore_definitions(bind, dir)
