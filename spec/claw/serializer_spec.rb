@@ -55,6 +55,33 @@ RSpec.describe Claw::Serializer do
     end
   end
 
+  describe "fallback warnings" do
+    # Regression: MarshalMd failures used to fall back to JSON or skip
+    # silently. Users had no idea their data didn't survive in full
+    # fidelity. Now we surface a stderr line per degraded / skipped var.
+
+    it "warns on stderr when MarshalMd fails but JSON succeeds" do
+      # Bare Object → MarshalMd should fail (no _dump_data), JSON also fails
+      # (cannot serialize arbitrary objects), so this triggers the skip path.
+      # Use an object that MarshalMd refuses but JSON.generate accepts: a
+      # Symbol works — MarshalMd handles symbols, so that's not it. We need
+      # something MarshalMd rejects but JSON accepts. Floats are fine in both.
+      # Easiest: stub MarshalMd.dump to raise TypeError.
+      allow(MarshalMd).to receive(:dump).and_raise(TypeError, "no _dump for Foo")
+
+      bind = make_binding_with(x: 42) # JSON-serializable
+      expect { described_class.save(bind, dir) }.to output(/degraded to MarshalMd → JSON/).to_stderr
+    end
+
+    it "warns on stderr when a value cannot be serialized at all" do
+      # Force both encoders to fail to exercise the skip path.
+      allow(MarshalMd).to receive(:dump).and_raise(TypeError, "no _dump")
+      allow(JSON).to receive(:generate).and_raise(JSON::GeneratorError, "not serializable")
+      bind = make_binding_with(closure: -> { 1 })
+      expect { described_class.save(bind, dir) }.to output(/skipped 'closure'/).to_stderr
+    end
+  end
+
   describe ".restore return value" do
     it "returns an empty array when no files exist" do
       bind = make_binding_with(x: 99)

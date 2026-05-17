@@ -67,6 +67,16 @@ RSpec.describe Claw::Commands do
       expect(result[:type]).to eq(:success)
       expect(runtime.resources["test"].value).to eq(42)
     end
+
+    it "returns a clear error when the snapshot id does not exist" do
+      # Regression: previously /rollback 999 dropped into runtime.rollback!
+      # which raised, the exception was swallowed by the outer rescue, and the
+      # user only saw a generic "ArgumentError" message with no available IDs.
+      result = described_class.dispatch("rollback", "999", runtime: runtime)
+      expect(result[:type]).to eq(:error)
+      expect(result[:message]).to include("not found")
+      expect(result[:message]).to include("#1")  # surfaces available snapshots
+    end
   end
 
   describe "diff" do

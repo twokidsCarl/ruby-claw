@@ -43,7 +43,7 @@ module Claw
           next if baseline_vars.include?(name_s)
 
           val = bind.local_variable_get(name)
-          encoded = encode_value(val)
+          encoded = encode_value(val, name: name_s)
           values[name_s] = encoded if encoded
         end
 
@@ -66,18 +66,32 @@ module Claw
 
       # Encode a value for storage.
       # Strategy: try MarshalMd (human-readable Markdown), fall back to JSON, skip unserializable.
-      def encode_value(val)
+      # When degrading or skipping, log to stderr so the user knows their data
+      # didn't survive in full fidelity instead of silently disappearing.
+      def encode_value(val, name: nil)
         # Try MarshalMd first for full Ruby fidelity + human readability
         md = MarshalMd.dump(val)
         { "type" => "marshal_md", "data" => md }
-      rescue TypeError
+      rescue TypeError => marshal_err
         # MarshalMd failed — try JSON for simple types
         begin
           json = JSON.generate(val)
+          warn_serializer_degrade(name, val, marshal_err, "MarshalMd → JSON")
           { "type" => "json", "data" => json }
-        rescue JSON::GeneratorError
+        rescue JSON::GeneratorError => json_err
+          warn_serializer_skip(name, val, json_err)
           nil # Unserializable — skip
         end
+      end
+
+      def warn_serializer_degrade(name, val, err, path)
+        return unless name
+        $stderr.puts "Claw::Serializer: '#{name}' (#{val.class}) degraded to #{path}: #{err.message}"
+      end
+
+      def warn_serializer_skip(name, val, err)
+        return unless name
+        $stderr.puts "Claw::Serializer: skipped '#{name}' (#{val.class}) — not serializable: #{err.message}"
       end
 
       # Decode a value from its stored representation.
