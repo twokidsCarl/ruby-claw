@@ -76,7 +76,19 @@ module Claw
           when :tool_call
             lines << Styles::TOOL_STYLE.render("  #{msg[:icon] || "⚡"} #{msg[:detail]}")
           when :tool_result
-            lines << Styles::RESULT_STYLE.render("  ↩ #{truncate(msg[:result].to_s, width - 6)}")
+            # When the result is large, the user used to see a bare `...` with
+            # no indicator. Surface that data was cut, and stash the full
+            # content in :folded_full so the existing fold-expand UI (Ctrl+E
+            # on a focused message) can show it.
+            full = msg[:result].to_s
+            max = width - 6
+            if full.length > max
+              msg[:folded_full] = full
+              shown = "#{full[0, max - 30]}... (truncated, Ctrl+E to expand)"
+              lines << Styles::RESULT_STYLE.render("  ↩ #{shown}")
+            else
+              lines << Styles::RESULT_STYLE.render("  ↩ #{full}")
+            end
           when :ruby
             highlighted = InputHandler.highlight(msg[:content].to_s)
             lines << Styles::RUBY_STYLE.render("=> #{highlighted}")
