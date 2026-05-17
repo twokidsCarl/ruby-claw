@@ -34,7 +34,12 @@ RSpec.describe Claw::TUI::RubyTextArea do
     it "highlights symbols" do
       ta.value = "x = :foo"
       output = ta.view
-      expect(output).to include("\e[33m:foo\e[0m")
+      # Ripper tokenizes :foo as two tokens (:on_symbeg ":" + :on_ident "foo");
+      # both are colored yellow so the visual result is identical to a single
+      # contiguous span. Check the parts independently to stay tokenizer-
+      # implementation-agnostic.
+      expect(output).to include("\e[33m:\e[0m")
+      expect(output).to match(/\e\[33m:?\e\[0m.{0,3}\e\[33mfoo\e\[0m/) # `:` then `foo` both yellow
     end
 
     it "highlights boolean literals" do
