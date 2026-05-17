@@ -3,6 +3,30 @@
 require "spec_helper"
 
 RSpec.describe Claw::TUI::Folding do
+  describe ".fold_text" do
+    it "returns unfolded structure for short text" do
+      r = described_class.fold_text("a\nb\n")
+      expect(r[:folded]).to be false
+      expect(r[:display]).to eq("a\nb\n")
+      expect(r[:full]).to eq("a\nb\n")
+    end
+
+    it "folds text exceeding the threshold" do
+      text = (1..15).map { |i| "line#{i}\n" }.join
+      r = described_class.fold_text(text, threshold: 10)
+      expect(r[:folded]).to be true
+      expect(r[:display]).to include("line1")
+      expect(r[:display]).to include("more lines")
+      expect(r[:full]).to eq(text)
+    end
+
+    it "does NOT accept unused zone/fold_id kwargs (regression: call site once passed these)" do
+      # If someone re-introduces unused kwargs without using them, this test
+      # forces the choice: implement or drop on both sides. Keeps the API honest.
+      expect { described_class.fold_text("x", zone: :z, fold_id: 1) }.to raise_error(ArgumentError)
+    end
+  end
+
   describe ".fold_tool_calls" do
     it "preserves non-tool_call messages" do
       messages = [

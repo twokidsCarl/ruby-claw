@@ -43,6 +43,14 @@ module Claw
         return { type: :error, message: "Usage: /rollback <id>" }
       end
       snap_id = arg.to_i
+      # Validate the snapshot exists before attempting rollback — otherwise
+      # runtime.rollback! raises, the exception is swallowed by the outer
+      # rescue, and the user only sees a generic error.
+      unless runtime.snapshots.any? { |s| s.id == snap_id }
+        available = runtime.snapshots.map { |s| "##{s.id}" }.join(", ")
+        return { type: :error,
+                 message: "snapshot ##{snap_id} not found (available: #{available.empty? ? 'none' : available})" }
+      end
       runtime.rollback!(snap_id)
       { type: :success, message: "rolled back to snapshot ##{snap_id}", data: { id: snap_id } }
     end

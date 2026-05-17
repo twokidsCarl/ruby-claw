@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "glamour"
+require "timeout"
 
 module Claw
   module TUI
@@ -53,12 +54,21 @@ module Claw
           when :user
             lines << Styles::USER_STYLE.render(">> #{msg[:content]}")
           when :agent
+            # Glamour can hang on pathological Markdown (deeply nested lists,
+            # malformed tables, very long single lines). 2s is generous for
+            # any sane message and unblocks the TUI when it isn't.
             rendered = begin
-              Glamour.render(msg[:content].to_s)
+              Timeout.timeout(2) { Glamour.render(msg[:content].to_s) }
+            rescue Timeout::Error
+              "#{msg[:content].to_s}  [render: glamour timed out, showing plain text]"
             rescue
               msg[:content].to_s
             end
-            folded = Folding.fold_text(rendered.rstrip, zone: zone, fold_id: idx)
+            # zone/fold_id args were once passed here for a planned mouse-zone
+            # integration that never landed — fold_text doesn't accept them and
+            # would raise ArgumentError. Drop them. If we revive interactive
+            # fold-toggle later, add named kwargs and use them on both sides.
+            folded = Folding.fold_text(rendered.rstrip)
             if folded[:folded]
               msg[:folded_full] = folded[:full]
             end
