@@ -52,8 +52,12 @@ module Claw
       end
 
       def self.visible_width(str)
-        # Strip ANSI escape sequences for width calculation
-        str.gsub(/\e\[[0-9;]*m/, "").size
+        # Use Lipgloss to compute display width — handles ANSI escapes, CJK
+        # double-width characters, and emoji correctly. The naive `.size`
+        # treats every codepoint as one column, which breaks the status-bar
+        # layout when the model name or any other left item contains Chinese
+        # or wide characters.
+        Lipgloss.size(str).first
       end
 
       private_class_method :build_right, :compose, :visible_width
