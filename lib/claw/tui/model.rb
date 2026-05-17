@@ -34,7 +34,7 @@ module Claw
     # Implements Bubbletea's init/update/view protocol.
     class Model
       attr_reader :runtime, :chat_history, :mode, :chat_viewport, :executor, :textarea,
-                  :baseline_methods, :baseline_vars, :input_history, :zone, :tab_hint
+                  :baseline_methods, :baseline_vars, :zone, :tab_hint, :history
       attr_accessor :chat_ratio, :dragging_divider
 
       # Cap @chat_history to avoid unbounded growth in long sessions. When the
@@ -44,6 +44,12 @@ module Claw
       CHAT_HISTORY_MAX        = 2000
       CHAT_HISTORY_TRIM_CHUNK = 500
 
+      # Back-compat: tests and callers still ask for `input_history`. Delegate
+      # to HistoryManager so the historical name keeps working.
+      def input_history
+        @history.entries
+      end
+
       def initialize(caller_binding, baseline_methods: nil, baseline_vars: nil)
         @caller_binding = caller_binding
         @runtime = init_runtime(caller_binding)
@@ -51,9 +57,7 @@ module Claw
         @mode = :normal  # :normal | :plan
         @scrolled_up = false
         @text_buffer = +""  # accumulates streaming text
-        @input_history = []
-        @history_index = nil
-        @saved_input = +""
+        @history = HistoryManager.new
         @chat_ratio = 0.70
         @dragging_divider = false
         @tab_hint = nil
@@ -353,8 +357,7 @@ module Claw
 
         @chat_history << { role: :user, content: text }
         @scrolled_up = false
-        @input_history << text
-        @history_index = nil
+        @history.record(text)
 
         if text.start_with?("/")
           handle_slash(text)
@@ -364,112 +367,11 @@ module Claw
         end
       end
 
+      # All slash-command logic lives in Claw::TUI::CommandProcessor; this
+      # method is now just the dispatch entry point. Kept on Model so the
+      # call site in `submit_textarea` reads naturally.
       def handle_slash(text)
-        cmd, *args = text.sub(/\A\//, "").split(" ", 2)
-        arg = args.first
-
-        if cmd == "help"
-          cmds = [
-            ["/help",         "show this help"],
-            ["/new",          "new session"],
-            ["/status",       "runtime status"],
-            ["/snapshot [l]", "create snapshot"],
-            ["/rollback <id>","restore snapshot"],
-            ["/diff [a] [b]", "diff snapshots"],
-            ["/history",      "list snapshots"],
-            ["/plan",         "toggle plan mode"],
-            ["/cd <obj>",     "navigate into object"],
-            ["/source <m>",   "show method source"],
-            ["/doc <m>",      "show method docs"],
-            ["/find <pat>",   "search methods"],
-            ["/role [name]",  "switch role"],
-            ["/evolve",       "run evolution"],
-            ["/forge <m>",    "promote method"],
-          ]
-          max_cmd = cmds.map { |c, _| c.length }.max
-          help = cmds.map { |c, d| "  %-#{max_cmd}s — %s" % [c, d] }
-          help << ""
-          help << "  Ruby expressions are evaluated directly."
-          help << "  Natural language is sent to AI automatically."
-          help << "  exit/quit — quit (or ctrl+d)"
-          help << "  ↑↓ history | tab completion | pgup/pgdn scroll"
-          @chat_history << { role: :system, content: help.join("\n") }
-          return [self, Bubbletea.none]
-        end
-
-        if cmd == "new"
-          @chat_history.clear
-          @chat_history << { role: :system, content: "New session." }
-          Mana::Context.current.reset! if Mana::Context.current.respond_to?(:reset!)
-          @chat_viewport.content = ""
-          @scrolled_up = false
-          return [self, Bubbletea.none]
-        end
-
-        if cmd == "plan"
-          @mode = @mode == :plan ? :normal : :plan
-          @chat_history << { role: :system, content: "mode: #{@mode}" }
-          return [self, Bubbletea.none]
-        end
-
-        # Object explorer commands
-        case cmd
-        when "cd"
-          @nav_stack ||= []
-          result = ObjectExplorer.cd(arg || "..", @caller_binding, @nav_stack)
-          if result[:type] == :success
-            @caller_binding = result[:data][:binding]
-            @chat_history << { role: :system, content: "cd → #{result[:data][:label]}" }
-          else
-            @chat_history << { role: :error, content: result[:message] }
-          end
-          return [self, Bubbletea.none]
-        when "source"
-          result = ObjectExplorer.source(arg.to_s, @caller_binding)
-          if result[:type] == :data
-            @chat_history << { role: :system, content: "#{result[:data][:file]}:#{result[:data][:line]}\n#{result[:data][:source]}" }
-          elsif result[:type] == :error
-            # Try to find REPL-defined source from tracked definitions
-            receiver = @caller_binding.eval("self")
-            defs = receiver.instance_variable_defined?(:@__claw_definitions__) ?
-              receiver.instance_variable_get(:@__claw_definitions__) : {}
-            if defs[arg.to_s]
-              @chat_history << { role: :system, content: "(defined in REPL)\n#{defs[arg.to_s]}" }
-            else
-              # Check if method exists but source is (eval)
-              begin
-                meth = @caller_binding.eval("method(:#{arg})")
-                loc = meth.source_location
-                if loc && loc[0] == "(eval)"
-                  @chat_history << { role: :system, content: "Method '#{arg}' defined in REPL session (source not available)" }
-                else
-                  @chat_history << { role: :error, content: result[:message] }
-                end
-              rescue
-                @chat_history << { role: :error, content: result[:message] }
-              end
-            end
-          else
-            @chat_history << { role: :error, content: result[:message] }
-          end
-          return [self, Bubbletea.none]
-        when "doc"
-          result = ObjectExplorer.doc(arg.to_s, @caller_binding)
-          @chat_history << { role: :system, content: result[:data][:doc].to_s }
-          return [self, Bubbletea.none]
-        when "find"
-          result = ObjectExplorer.find(arg.to_s, @caller_binding)
-          if result[:type] == :data
-            @chat_history << { role: :system, content: result[:data][:matches].join(", ") }
-          else
-            @chat_history << { role: :system, content: result[:message] }
-          end
-          return [self, Bubbletea.none]
-        end
-
-        result = Claw::Commands.dispatch(cmd, arg, runtime: @runtime)
-        handle_command_result(CommandResultMsg.new(result: result, cmd: cmd))
-        [self, Bubbletea.none]
+        CommandProcessor.dispatch(self, text)
       end
 
       def handle_smart_input(text)
@@ -525,32 +427,13 @@ module Claw
         false
       end
 
+      # Delegate to HistoryManager. Model owns the textarea mutation; the
+      # manager owns the navigation state — clean separation.
       def navigate_history(direction)
-        return if @input_history.empty?
-
-        if direction == :up
-          if @history_index.nil?
-            @saved_input = @textarea.value
-            @history_index = @input_history.size - 1
-          elsif @history_index > 0
-            @history_index -= 1
-          else
-            return
-          end
-          @textarea.reset
-          @textarea.value = @input_history[@history_index]
-        else # :down
-          return if @history_index.nil?
-          if @history_index < @input_history.size - 1
-            @history_index += 1
-            @textarea.reset
-            @textarea.value = @input_history[@history_index]
-          else
-            @history_index = nil
-            @textarea.reset
-            @textarea.value = @saved_input || ""
-          end
-        end
+        recalled = direction == :up ? @history.up(@textarea.value) : @history.down
+        return if recalled.nil?
+        @textarea.reset
+        @textarea.value = recalled
       end
 
       def handle_tab_completion

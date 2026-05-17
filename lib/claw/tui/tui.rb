@@ -17,6 +17,8 @@ require_relative "object_explorer"
 require_relative "file_card"
 require_relative "folding"
 require_relative "ruby_text_area"
+require_relative "history_manager"
+require_relative "command_processor"
 require_relative "model"
 
 module Claw
