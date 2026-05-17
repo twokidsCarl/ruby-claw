@@ -16,6 +16,7 @@ require_relative "input_handler"
 require_relative "object_explorer"
 require_relative "file_card"
 require_relative "folding"
+require_relative "ruby_text_area"
 require_relative "model"
 
 module Claw
@@ -24,11 +25,17 @@ module Claw
     #
     # @param caller_binding [Binding] the caller's binding for variable access
     def self.start(caller_binding)
-      # Load session state
+      # Snapshot baseline BEFORE restore so persisted items show in panel
+      baseline_methods = caller_binding.eval("methods | private_methods").dup rescue []
+      baseline_vars = caller_binding.local_variables.map(&:to_s) rescue []
+
+      # Load session state (restores persisted vars + methods onto binding)
       load_session(caller_binding)
 
-      model = Model.new(caller_binding)
-      Bubbletea.run(model, alt_screen: true)
+      model = Model.new(caller_binding,
+                        baseline_methods: baseline_methods,
+                        baseline_vars: baseline_vars)
+      Bubbletea.run(model, alt_screen: true, mouse: true)
     end
 
     # --- Session loading (extracted from Chat) ---
