@@ -37,6 +37,13 @@ module Claw
                   :baseline_methods, :baseline_vars, :input_history, :zone, :tab_hint
       attr_accessor :chat_ratio, :dragging_divider
 
+      # Cap @chat_history to avoid unbounded growth in long sessions. When the
+      # array exceeds MAX, drop the oldest TRIM_CHUNK entries in one go (FIFO)
+      # and inject a synthetic marker so the user knows older scrollback was
+      # truncated. Pruning is O(1) per update tick when under the cap.
+      CHAT_HISTORY_MAX        = 2000
+      CHAT_HISTORY_TRIM_CHUNK = 500
+
       def initialize(caller_binding, baseline_methods: nil, baseline_vars: nil)
         @caller_binding = caller_binding
         @runtime = init_runtime(caller_binding)
@@ -135,6 +142,7 @@ module Claw
               else
                 Bubbletea.none
               end
+        prune_chat_history!
         [self, cmd]
       end
 
@@ -163,6 +171,19 @@ module Claw
       def spinner_view = @spinner.view
 
       private
+
+      # Drop the oldest TRIM_CHUNK messages once @chat_history exceeds MAX.
+      # Replaces them with a single :system marker so the user knows older
+      # scrollback isn't gone "silently". Called from #update on every tick;
+      # the early return makes the under-cap path effectively free.
+      def prune_chat_history!
+        return if @chat_history.size <= CHAT_HISTORY_MAX
+
+        dropped = @chat_history.shift(CHAT_HISTORY_TRIM_CHUNK).size
+        @chat_history.unshift(
+          { role: :system, content: "[trimmed #{dropped} older messages]" }
+        )
+      end
 
       def handle_mouse(msg)
         w = @view_width
@@ -272,13 +293,7 @@ module Claw
             @textarea, ta_cmd = @textarea.update(msg)
             # Auto-indent: insert spaces at cursor on the new line
             indent = InputHandler.indent_level(@textarea.value)
-            if indent > 0
-              spaces = " " * indent
-              lines = @textarea.instance_variable_get(:@lines)
-              row = @textarea.row
-              lines[row] = spaces + lines[row].to_s
-              @textarea.instance_variable_set(:@col, indent)
-            end
+            @textarea.indent_current_line(" " * indent) if indent > 0
             return [self, ta_cmd]
           else
             # Complete input — submit
@@ -308,18 +323,11 @@ module Claw
         # All other keys → forward to textarea
         @textarea, ta_cmd = @textarea.update(msg)
 
-        # Auto-dedent: when user completes typing "end", reduce indent
-        if @textarea.line_count > 1
-          lines = @textarea.instance_variable_get(:@lines)
-          row = @textarea.row
-          current = lines[row].to_s
-          if current.match?(/\A\s+end\s*\z/)
-            stripped = current.sub(/\A  /, "")
-            if stripped != current
-              lines[row] = stripped
-              @textarea.instance_variable_set(:@col, [@textarea.col - 2, 0].max)
-            end
-          end
+        # Auto-dedent: when user completes typing "end", reduce indent.
+        # Both the check and mutation live inside RubyTextArea so the Bubbles
+        # internal-state access is contained to one file.
+        if @textarea.line_count > 1 && @textarea.current_line_is_lone_end?
+          @textarea.dedent_current_line(2)
         end
 
         [self, ta_cmd]
