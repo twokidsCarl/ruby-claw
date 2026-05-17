@@ -82,7 +82,6 @@ RSpec.describe "tui-snapshot" do
       help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content].include?("/status") }
       expect(help_msg).not_to be_nil
       expect(help_msg[:content]).to include("/snapshot")
-      expect(help_msg[:content]).to include("/ask")
       expect(help_msg[:content]).to include("/new")
       expect(help_msg[:content]).to include("Ruby expressions are evaluated directly.")
     end
@@ -167,7 +166,7 @@ RSpec.describe "tui-snapshot" do
     it "has consistent indentation in /help output" do
       model = build_model
       submit(model, "/help")
-      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/ask") }
+      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/help") }
       lines = help_msg[:content].split("\n").select { |l| l.include?("—") }
       # All command lines should have same indentation
       indents = lines.map { |l| l.match(/\A(\s*)/)[1].length }
@@ -177,7 +176,7 @@ RSpec.describe "tui-snapshot" do
     it "does not include /ls or /whereami" do
       model = build_model
       submit(model, "/help")
-      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/ask") }
+      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/help") }
       expect(help_msg[:content]).not_to include("/ls")
       expect(help_msg[:content]).not_to include("/whereami")
     end
@@ -185,7 +184,7 @@ RSpec.describe "tui-snapshot" do
     it "includes history and tab completion hint" do
       model = build_model
       submit(model, "/help")
-      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/ask") }
+      help_msg = model.chat_history.find { |m| m[:role] == :system && m[:content]&.include?("/help") }
       expect(help_msg[:content]).to include("history")
       expect(help_msg[:content]).to include("tab completion")
     end
