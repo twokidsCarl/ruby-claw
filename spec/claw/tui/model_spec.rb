@@ -129,6 +129,39 @@ RSpec.describe Claw::TUI::Model do
         expect(agent_msgs.size).to eq(1)
         expect(agent_msgs.first[:content]).to eq("result text")
       end
+
+      # Regression: when no streaming text deltas were received (proxy
+      # returned non-SSE, or model went straight to done() with the answer
+      # in its `result` parameter), msg.result used to be silently dropped
+      # and the user saw nothing.
+      it "displays msg.result when no streaming text was captured" do
+        model.update(Claw::TUI::ExecutionDoneMsg.new(result: "the answer", trace: nil))
+        agent_msgs = model.chat_history.select { |m| m[:role] == :agent }
+        expect(agent_msgs.size).to eq(1)
+        expect(agent_msgs.first[:content]).to eq("the answer")
+      end
+
+      it "does NOT double-show when both streaming text and result exist" do
+        model.update(Claw::TUI::AgentTextMsg.new(text: "streamed"))
+        model.update(Claw::TUI::ExecutionDoneMsg.new(result: "also returned", trace: nil))
+        agent_msgs = model.chat_history.select { |m| m[:role] == :agent }
+        expect(agent_msgs.size).to eq(1)
+        expect(agent_msgs.first[:content]).to eq("streamed")
+      end
+
+      it "ignores non-string result (e.g. Hash from write_var) when no streaming text" do
+        # write_var returns make engine.execute return a Hash, not a string
+        # to display as agent message.
+        model.update(Claw::TUI::ExecutionDoneMsg.new(result: { x: 42 }, trace: nil))
+        agent_msgs = model.chat_history.select { |m| m[:role] == :agent }
+        expect(agent_msgs.size).to eq(0)
+      end
+
+      it "ignores empty/whitespace-only result" do
+        model.update(Claw::TUI::ExecutionDoneMsg.new(result: "   ", trace: nil))
+        agent_msgs = model.chat_history.select { |m| m[:role] == :agent }
+        expect(agent_msgs.size).to eq(0)
+      end
     end
 
     context "with ExecutionErrorMsg" do
@@ -140,7 +173,9 @@ RSpec.describe Claw::TUI::Model do
       it "adds error to chat history" do
         model.update(Claw::TUI::ExecutionErrorMsg.new(error: RuntimeError.new("boom")))
         expect(model.chat_history.last[:role]).to eq(:error)
-        expect(model.chat_history.last[:content]).to eq("boom")
+        # We now include the exception class so the user can distinguish
+        # LLMError / Net::ReadTimeout / SocketError without opening the log.
+        expect(model.chat_history.last[:content]).to eq("RuntimeError: boom")
       end
     end
 

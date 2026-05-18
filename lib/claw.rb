@@ -3,6 +3,7 @@
 require "mana"
 require "marshal-md"
 require_relative "claw/version"
+require_relative "claw/log"
 require_relative "claw/config"
 require_relative "claw/memory_store"
 require_relative "claw/memory"

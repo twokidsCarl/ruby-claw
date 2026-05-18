@@ -126,13 +126,31 @@ module Claw
                 @chat_history << { role: :tool_result, result: msg.result } unless msg.result.to_s.start_with?("ok:")
                 Bubbletea.none
               when ExecutionDoneMsg
+                # Capture buffered text size BEFORE flush — if it was empty,
+                # the LLM didn't stream any text deltas to us. That happens in
+                # two real cases we used to silently drop:
+                #   1. The model used the `done(result: "...")` tool to finalize
+                #      its answer without preceding prose. The answer is in
+                #      msg.result but no :text events ever fired.
+                #   2. The backend proxy returned a non-SSE response, so
+                #      chat_stream parsed zero event frames. Same outcome.
+                # In both cases, surface msg.result as an :agent message so the
+                # user sees the answer instead of staring at a silent TUI.
+                had_streamed_text = !@text_buffer.empty?
                 flush_text_buffer
+                if !had_streamed_text && msg.result.is_a?(String) && !msg.result.strip.empty?
+                  @chat_history << { role: :agent, content: msg.result }
+                end
                 write_trace(msg.trace)
                 Claw.memory&.schedule_compaction
                 Bubbletea.none
               when ExecutionErrorMsg
                 flush_text_buffer
-                @chat_history << { role: :error, content: msg.error.message }
+                # Surface class + message; details (backtrace) go to claw.log.
+                # Without the class the user can't tell LLMError from
+                # SocketError from TimeoutError — all critical for debugging.
+                @chat_history << { role: :error,
+                                   content: "#{msg.error.class}: #{msg.error.message}" }
                 Bubbletea.none
               when CommandResultMsg
                 handle_command_result(msg)
