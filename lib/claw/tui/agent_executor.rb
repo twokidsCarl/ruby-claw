@@ -39,6 +39,7 @@ module Claw
         end
 
         @runtime&.transition!(:thinking)
+        Claw::Log.info "agent.execute prompt=#{input.inspect[0, 200]}"
 
         # Capture thread-local state from main thread
         parent_context = Thread.current[:mana_context]
@@ -57,11 +58,13 @@ module Claw
           result = engine.execute(input) do |type, *args|
             case type
             when :text
+              Claw::Log.debug "stream text delta: #{args[0].inspect[0, 80]}"
               on_event.call(AgentTextMsg.new(text: args[0]))
 
             when :tool_start
               step_num += 1
               name, input_data = args
+              Claw::Log.info "tool_start ##{step_num} #{name} input=#{input_data.inspect[0, 200]}"
               @runtime&.transition!(:executing_tool,
                 step: Runtime::Step.new(
                   number: step_num,
@@ -72,14 +75,17 @@ module Claw
 
             when :tool_end
               name, result_str = args
+              Claw::Log.info "tool_end #{name} result=#{result_str.to_s[0, 200]}"
               on_event.call(ToolResultMsg.new(name: name, result: result_str))
               @runtime&.transition!(:thinking)
             end
           end
 
+          Claw::Log.info "agent.done result=#{result.inspect[0, 200]}"
           @runtime&.transition!(:idle)
           on_event.call(ExecutionDoneMsg.new(result: result, trace: engine.trace_data))
         rescue => e
+          Claw::Log.error e
           @runtime&.transition!(:failed)
           on_event.call(ExecutionErrorMsg.new(error: e))
         ensure
